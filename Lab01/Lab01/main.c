@@ -11,29 +11,24 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include "Display_Lib/Disp_Lib.h"
 
 uint8_t	counter;
 uint8_t pb_flag;
 uint8_t estado_actual;
 uint8_t estado_anterior;
-uint8_t disp_1;
-//uint8_t disp_value[] = {0x5F, 0x06, 0x3B, 0x2F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x77, 0x7C, 0x59, 0x3E, 0x79, 0x71};
-uint8_t disp_value[] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 
-0x07, 
-0x7F,
-0x6F, 
-0x77, 
-0x7C, 
-0x39, 
-0x5E, 
-0x79, 
-0x71  
-};
+uint8_t estado_actual_B;
+uint8_t estado_anterior_B;
+uint8_t jugador_1;
+uint8_t jugador_2;
+uint8_t ganador;
+uint8_t start;
 #define	TCNT0_Value 134;
 //*********************************************
 // Function prototypes
 void setup();
 void initTMR0();
+void juego(uint8_t *jugador);
 
 //*********************************************
 // Main Function
@@ -42,16 +37,65 @@ int main(void)
 {
 	setup();	// Se manda a llamar la función de Setup
 	
-	PORTD = disp_value[5];
+	show_display(5);
 	
 	while(1)	// Entra al bucle infinito en donde se ejecuta el programa
 	{
 		if (pb_flag == 1)	// Si la bandera de acción de PB0 está encendida entra al if
 		{
 			pb_flag = 0;		// Apaga la bandera de acción de los botones
-			TIMSK0  = (1 << TOIE0);					// Se encienden las interrupciones del timer0
+			counter = 6;
+			start = 0;
+			ganador = 0;
+			jugador_1 = 0x00;
+			jugador_2 = 0x00;
+			PORTB = (PORTB & 0xF0);
+			PORTC = (PORTC & ~((1<<PORTC2)|(1<<PORTC3)|(1<<PORTC4)|(1<<PORTC5))) | (1<<PORTC0) | (1<<PORTC1);
 			TCNT0   = TCNT0_Value;					// Se carga el valor al TCNT0
-			//counter++;			// Le suma al contador+
+			TIMSK0  = (1 << TOIE0);					// Se encienden las interrupciones del timer0	
+		}
+		else if (start == 1)
+		{
+			if (pb_flag == 2)
+			{
+				pb_flag = 0;		// Apaga la bandera de acción de los botones
+				switch(ganador)
+				{
+					case 0:
+					juego(&jugador_1);
+					PORTB = (PORTB & 0xF0) | (jugador_1 & 0x0F);
+					if (ganador == 1)
+					{
+						PORTB = 0x0F;
+						show_display(1);
+					}
+					break;
+				
+					case 1:
+					start = 0;
+					break;
+				}
+			}
+			else if (pb_flag == 3)
+			{
+				pb_flag = 0;		// Apaga la bandera de acción de los botones
+				switch(ganador)
+				{
+					case 0:
+					juego(&jugador_2);
+					PORTC = ((jugador_2 & 0x0F) << 2);
+					if (ganador == 1)
+					{
+						PORTC = 0x3C;
+						show_display(2);
+					}
+					break;
+				
+					case 1:
+					start = 0;
+					break;
+				}
+			}
 		}
 		else   // El else no hace nada
 		{
@@ -73,17 +117,20 @@ void setup()
 	DDRD	= 0xFF;			// Se configura PORTD como salida
 	PORTD	= 0x00;			// PORTD inicialmente apagado
 	DDRC	= 0xFF;			// Se configura PORTC como salida
-	DDRC	&= ~((1 << DDC1) | (1 << DDC2) | (1 << DDC3)); // Se configura PC1-PC3 como input
+	DDRC	&= ~((1 << DDC0) | (1 << DDC1)); // Se configura PC0 y PC1 como input
 	PORTC	= 0x00;			// PORTC inicialmente apagado
-	PORTC	|= (1 << PORTC0) | (1 << PORTC1) | (1 << PORTC2);
-	DDRB	= 0xFF;			// Se configura PORTB como input
-	PORTD	= 0x00;			// PORTB con pull-up activado
+	PORTC	|= (1 << PORTC0) | (1 << PORTC1); // Pull-up para PC0 y PC1
+	DDRB	= 0xFF;			// Se configura PORTB como salida
+	DDRB	&= ~(1 << DDB5);	// PB5 se configura como input
+	PORTB	= 0x00;			// PORTB inicialmente apagado
+	PORTB	|= (1 << PORTB5); // Pull-up para PB5
 	
 	// Inicio de Timers
 	initTMR0();	
 
 	// Configuración de Interrupciones
-	PCICR  |= (1 << PCIE1);						// Habilita las interrupciones pin-change para PORTB
+	PCICR  |= (1 << PCIE1) | (1 << PCIE0);		// Habilita las interrupciones pin-change para PORTB y PORTC
+	PCMSK0 |= (1 << PCINT5);	// Habilita PCINT0 y PCINT1
 	PCMSK1 |= (1 << PCINT0) | (1 << PCINT1);	// Habilita PCINT0 y PCINT1
 	
 	// Inicialización de Variables
@@ -91,6 +138,9 @@ void setup()
 	pb_flag = 0;
 	estado_actual	= 0xFF;
 	estado_anterior	= 0xFF;
+	jugador_1 = 0;
+	jugador_2 = 0;
+	start = 0;
 	
 	sei(); // Se encienden las interrupciones globales
 }
@@ -102,9 +152,35 @@ void initTMR0()
 	TCNT0   = TCNT0_Value;					// Se carga el valor al TCNT0
 }
 
+void juego(uint8_t *jugador)
+{
+	if (*jugador == 0) 
+	{
+		*jugador = 1;
+	} 
+	else if (*jugador < 0x04) 
+	{
+		*jugador <<= 1;
+	} 
+	else
+	{ 
+		ganador = 1;
+	}
+}
 
 //*********************************************
 // Interrupt routines
+
+ISR(PCINT0_vect)
+{
+	estado_actual_B = PINB;  // Leer el estado actual de los botones
+	
+	if (((estado_anterior_B & (1 << PORTB5)) != 0) && ((estado_actual_B & (1 << PORTB5)) == 0))	// Se verifica si el botón está presionado y si hubo cambio de estado
+	{
+		pb_flag = 1;																	// Si PB0 está presionado y hubo cambio de estado, se enciende la bandera de acción de ese botón
+	}
+	estado_anterior_B = estado_actual_B;  // Guardar el estado actual a estado anterior
+}
 
 ISR(PCINT1_vect)
 {
@@ -112,12 +188,13 @@ ISR(PCINT1_vect)
 	
 	if (((estado_anterior & (1 << PORTC0)) != 0) && ((estado_actual & (1 << PORTC0)) == 0))	// Se verifica si el botón está presionado y si hubo cambio de estado
 	{
-		pb_flag = 1;																	// Si PB0 está presionado y hubo cambio de estado, se enciende la bandera de acción de ese botón
-	}/*
-	else if (((estado_anterior & (1 << PORTB1)) != 0) && ((estado_actual & (1 << PORTB1)) == 0)) // Se verifica si el botón está presionado y si hubo cambio de estado
+		pb_flag = 2;																	// Si PB0 está presionado y hubo cambio de estado, se enciende la bandera de acción de ese botón
+	}
+	
+	else if (((estado_anterior & (1 << PORTC1)) != 0) && ((estado_actual & (1 << PORTC1)) == 0)) // Se verifica si el botón está presionado y si hubo cambio de estado
 	{
-		pb_flag = 2;																	// Si PB1 está presionado y hubo cambio de estado, se enciende la bandera de acción de ese botón
-	}*/
+		pb_flag = 3;																	// Si PB1 está presionado y hubo cambio de estado, se enciende la bandera de acción de ese botón
+	}
 
 	estado_anterior = estado_actual;  // Guardar el estado actual a estado anterior
 }
@@ -127,30 +204,35 @@ ISR(TIMER0_OVF_vect)
 	TCNT0 = TCNT0_Value;	// Se carga el valor a TCNT0
 	counter--;
 	
+	if (counter == 0)
+	{
+		start = 1;
+	}
+	
 	switch(counter)		// Se hace un switch dependiendo del valor de la bandera de los displays
 	{
 		case 5:				// Caso bandera = 0
-		PORTD = disp_value[counter];	// Se muestra el valor de la lista en el display
+		show_display(counter);	// Se muestra el valor de la lista en el display
 		break;
 		
 		case 4:				// Caso bandera = 1
-		PORTD = disp_value[counter];	// Se muestra el valor de la lista en el display
+		show_display(counter);	// Se muestra el valor de la lista en el display
 		break;
 		
 		case 3:				// Caso bandera = 2
-		PORTD = disp_value[counter];	// Se muestra el valor de la lista en el display
+		show_display(counter);	// Se muestra el valor de la lista en el display
 		break;
 		
 		case 2:
-		PORTD = disp_value[counter];	// Se muestra el valor de la lista en el display
+		show_display(counter);	// Se muestra el valor de la lista en el display
 		break;
 		
 		case 1:
-		PORTD = disp_value[counter];	// Se muestra el valor de la lista en el display
+		show_display(counter);	// Se muestra el valor de la lista en el display
 		break;
 		
 		case 0:
-		PORTD = disp_value[counter];	// Se muestra el valor de la lista en el display
+		show_display(counter);	// Se muestra el valor de la lista en el display
 		counter = 6;
 		TIMSK0  = (0 << TOIE0);					// Se apagan las interrupciones del timer0
 		break;
