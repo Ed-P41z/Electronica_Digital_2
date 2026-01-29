@@ -63,4 +63,29 @@ void LCD_Shift_Left8bit(void);
 void LCD_Set_Cursor8bit(char c, char f);
 
 
+// --------------------------- Funciones para modo 8bits Combinando PORTB y PORTD --------------------------------------------
+// Función para inicializar LCD en modo 8 bits
+void initLCD8bitsBD(void);
+
+// Función para colocar en el puerto un valor
+void LCD_Port8bitBD(char a);
+
+// Función para enviar un comando
+void LCD_CMD8bitBD(char a);
+
+// Función para enviar un caracter
+void LCD_Write_Char8bitBD(char c);
+
+// Función para enviar una cadena
+void LCD_Write_String8bitBD(char *a);
+
+// Desplazamiento hacia la derecha
+void LCD_Shift_Right8bitBD(void);
+
+// Desplazamiento hacia la izquierda
+void LCD_Shift_Left8bitBD(void);
+
+// Establecer el cursor
+void LCD_Set_Cursor8bitBD(char c, char f);
+
 #endif /* LCD_H_ */

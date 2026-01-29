@@ -25,6 +25,10 @@ void initADC()
 
 void ADC_to_Voltage(uint8_t ADC_Value, uint16_t *Voltage)
 {
-	*Voltage = ((uint32_t)ADC_Value * 500) / 255;
+	*Voltage = ((uint32_t)ADC_Value * 500) / 255;	// Fúnción que convierte de 255 a 500
 }
 
+void ADC_to_Decimal(uint8_t ADC_Value, uint16_t *Decimal)
+{
+	*Decimal = ((uint32_t)ADC_Value * 1023) / 255;	// Función que convierte de 255 a 1023
+}
