@@ -44,11 +44,10 @@ void refreshPORT(uint8_t valor);
 // Main function
 int main(void)
 {
-	initSPI(SPI_SLAVE_SS, SPI_DATA_ORDER_MSB, SPI_CLOCK_IDLE_LOW, SPI_CLOCK_FIRST_EDGE);
-	setup();
-	initADC();
-	initUART();
-	SPCR |= (1 << SPIE);
+	initSPI(SPI_SLAVE_SS, SPI_DATA_ORDER_MSB, SPI_CLOCK_IDLE_LOW, SPI_CLOCK_FIRST_EDGE); // Se inicia la comunicación SPI en el slave
+	setup(); // Se llama el setup
+	initADC(); // Se inicia el ADC
+	SPCR |= (1 << SPIE); 
 	sei();
 	ADCSRA	|= (1 << ADSC);				// Se realiza la lectura de ADC
 	while(1)
@@ -101,7 +100,7 @@ void setup()
 	
 }
 
-void refreshPORT(uint8_t valor)
+void refreshPORT(uint8_t valor) // Función para escribir a los leds en PORTB y PORTD
 {
 	if (valor & 0b10000000)
 	{
@@ -157,7 +156,7 @@ void refreshPORT(uint8_t valor)
 // Interrupt routines
 
 ISR(ADC_vect){
-	adc_read = ADCH;
+	adc_read = ADCH; // Se guarda el valor del ADC HIGH y enciende la bandera de adc_flag para main
 	adc_flag = 1;
 }
 
@@ -166,27 +165,30 @@ ISR(SPI_STC_vect)
 {
 	uint8_t rx = SPDR;
 
-	if (rx == 'c') {
-		if (spi_counter == 0) 
+	if (rx == 'c') // Si se recibe 'c' en el SPDR se escriben los datos de los potenciómetros al SPDR
+	{	
+		if (spi_counter == 0) // Entra para cargar el valor del potenciómetro 1 al SPDR
 		{ 
 			spi_counter = 1; 
-			SPDR = adc_pot1; 
+			SPDR = adc_pot1; // Carga el valor del potenciómetro 1 al SPDR
 		}
-		else 
+		else // Entra para cargar el valor del potenciómetro 2 al SPDR
 		{ 
-			spi_counter = 0; 
-			SPDR = adc_pot2; 
+			spi_counter = 0;
+			SPDR = adc_pot2;	// Carga el valor del potenciómetro 2 al SPDR 
 		}
 		return;
 	}
 
-	if (expect_led == 1) {
-		spiValor = rx;      // aquí aceptas 0x00 también
-		led_flag = 1;
-		expect_led = 0;
+	if (expect_led == 1) 
+	{ // Ingresa cuando la bandera de expect_led se enciende
+		spiValor = rx;      // Se guarda el valor de SPRD en una variable
+		led_flag = 1;		// Se enciende la bandera de led_flag para el main
+		expect_led = 0;		// Se apaga expect_led
 	}
 
-	if (rx == 'L') {        // header para LEDs
+	if (rx == 'L') // Si SPDR recibe L enciende una bandera llamada expect_led
+	{        
 		expect_led = 1;
 	}
 }
