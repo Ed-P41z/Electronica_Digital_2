@@ -18,7 +18,8 @@
 # include "I2C/I2C.h" 
 # include "ADC/ADC.h"
 # include "HX711/HX711.h"
-#include "UART/UART.h"
+# include "UART/UART.h"
+# include "PWM/PWM.h"
 
 //Se define la dirección del esclavo, en este caso como es mi programa yo decido que dirección tiene
 // caso contrario cuando se trabaja con un sensor, se debe de colocar la dirección descrita por el datasheet del sensor
@@ -33,22 +34,29 @@ uint16_t tiempo = 0;
 int32_t offset;
 volatile int32_t hx_raw = 0;
 volatile uint16_t peso_g = 0;
-//int32_t offset = 193771;   // el que mediste (o el que obtengas en tare)
 int32_t scale  = 394;      // cuentas por gramo
+uint8_t stepper_count = 1;
+uint8_t steps = 0;
+uint8_t stepper = 0;
+
+# define angulo1_servo 170
+# define angulo2_servo 110
 
 
 //************************************************************************************
 // Function prototypes
-
 void distancia();
+void setup();
 
 //************************************************************************************
 // Main Function
 int main(void)
 {
-	
+	setup();
 	initHX711();
 	_delay_ms(200);               // estabilizar HX711
+	
+	initPWM1A(non_invert, 8);
 
 	// 3) Calcular offset (tara) al encender (sin carga)
 	offset = HX711_Tare(16);
@@ -76,13 +84,130 @@ int main(void)
 			peso_g = g;
 		}
 
-		_delay_ms(2);
+		 _delay_ms(2);
+		
+		// Dependiendo del comando que reciba se carga al servo la posición necesaria
+		if (buffer == 'B'){
+			//OCR1A = 1500;
+			servo_position1A(angulo1_servo);
+			buffer = 0;
+		}
+		else if (buffer == 'Y'){
+			//OCR1A = 5000;
+			servo_position1A(angulo2_servo);
+			buffer = 0;
+		}
+		
+		// Si se recibe T se comienza la secuencia del stepepr
+		if (buffer == 'T'){
+			stepper = buffer;	
+		}
+		// Se realiza el movimiento del stepper 
+		while (stepper == 'T')
+			{
+				// Se suman los pasos del stepper hasta llegar a 100 pasos
+				steps++;
+				if (steps == 100)
+				{
+					steps = 0;
+					stepper = 0; // Se reinician las variables para salir del ciclo
+				}
+				
+				switch (stepper_count){
+					// Se enciende la primera bobina
+					case 1:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD2);
+					stepper_count = 2;
+					_delay_ms(3);
+					break;
+			
+					// Se enciende la segunda bobina
+					case 2:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD3);
+					stepper_count = 3;
+					_delay_ms(3);
+					break;
+			
+					// Se enciende la tercera bobina
+					case 3:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD4);
+					stepper_count = 4;
+					_delay_ms(3);
+					break;
+			
+					// Se enciende la última bobina
+					case 4:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD5);
+					stepper_count = 1;
+					_delay_ms(3);
+					break;
+				}
+			}
+			
+			// Si se recibe 'A' entonces se realiza la secuencia inversa
+			if (buffer == 'A'){
+				stepper = buffer;
+			}
+			
+			while (stepper == 'A')
+			{
+				// Se cuentan 100 pasos de duración del ciclo
+				steps++;
+				if (steps == 100)
+				{
+					steps = 0;	// Se reinician las variables para salir del ciclo
+					stepper = 0;
+				}
+				
+				switch (stepper_count){
+					// Se enciende la cuarta bobina
+					case 1:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD5);
+					stepper_count = 2;
+					_delay_ms(3);
+					break;
+					
+					// Se enciende la tercera bobina
+					case 2:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD4);
+					stepper_count = 3;
+					_delay_ms(3);
+					break;
+					
+					// Se enciende la segunda bobina
+					case 3:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD3);
+					stepper_count = 4;
+					_delay_ms(3);
+					break;
+					
+					// Se enciende la última bobina
+					case 4:
+					PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+					PORTD |= (1 << PORTD2);
+					stepper_count = 1;
+					_delay_ms(3);
+					break;
+				}
+			}
 	}
 }
 
 //************************************************************************************
 // NON-INterrupt subroutines
-
+void setup()
+{
+	// Inicializo los pines del puerto D a utilizar para el Stepper
+	DDRD |= (1 << DDD2) | (1 << DDD3) | (1 << DDD4) | (1 << DDD5);
+	PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+}
 
 //************************************************************************************
 // Interrupt subroutines

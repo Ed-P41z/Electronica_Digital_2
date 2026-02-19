@@ -18,10 +18,10 @@
 # include "I2C/I2C.h" 
 # include "ADC/ADC.h"
 
+
 //Se define la dirección del esclavo, en este caso como es mi programa yo decido que dirección tiene
 // caso contrario cuando se trabaja con un sensor, se debe de colocar la dirección descrita por el datasheet del sensor
 # define SlaveAddress 0x30
-
 
 
 volatile uint8_t buffer = 0;
@@ -58,7 +58,6 @@ int main(void)
 	
 	I2C_Slave_Init(SlaveAddress); //Se define la dirección del esclavo
 	
-	
 	sei(); //Habilitar interrupciones
 	
 	//ADCSRA	|= (1 << ADSC);				// Se realiza la lectura de ADC
@@ -90,12 +89,6 @@ int main(void)
 			PORTD &= ~(1 << PORTD4); // LED OFF
 			buffer = 0;
 		}
-		//Iniciar la secuencia de ADC
-		/*if (adc_flag == 1)
-		{
-			ADCSRA	|= (1 << ADSC);				// Se realiza la lectura de ADC
-			adc_flag = 0;
-		}*/
 	}
 }
 
