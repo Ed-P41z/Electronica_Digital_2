@@ -44,7 +44,7 @@ int main(void)
 		if (pb_flag == 1)	// Si la bandera de acción de PB5 está encendida entra al if
 		{
 			pb_flag = 0;		// Apaga la bandera de acción de los botones
-			counter = 6;		// Cada vez que entra a la acción del botón 1 reinicia las variables para reinicial el juego
+			counter = 6;		// Cada vez que entra a la acción del botón 1 reinicia las variables para reiniciar el juego
 			start = 0;
 			ganador = 0;
 			jugador_1 = 0x00;
