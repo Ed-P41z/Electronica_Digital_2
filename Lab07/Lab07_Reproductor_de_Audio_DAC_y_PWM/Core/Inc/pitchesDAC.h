@@ -1,0 +1,133 @@
+/*
+ * pitchesDAC.h
+ *
+ *  Created on: Mar 23, 2026
+ *      Author: edvin
+ */
+
+#ifndef INC_PITCHESDAC_H_
+#define INC_PITCHESDAC_H_
+
+#define DAC_NOTE_C0 20065
+#define DAC_NOTE_CS0 18939
+#define DAC_NOTE_D0 17876
+#define DAC_NOTE_DS0 16872
+#define DAC_NOTE_E0 15925
+#define DAC_NOTE_F0 15031
+#define DAC_NOTE_FS0 14187
+#define DAC_NOTE_G0 13391
+#define DAC_NOTE_GS0 12639
+#define DAC_NOTE_A0 11930
+#define DAC_NOTE_AS0 11260
+#define DAC_NOTE_B0 10628
+#define DAC_NOTE_C1 10031
+#define DAC_NOTE_CS1 9468
+#define DAC_NOTE_D1 8937
+#define DAC_NOTE_DS1 8435
+#define DAC_NOTE_E1 7962
+#define DAC_NOTE_F1 7515
+#define DAC_NOTE_FS1 7093
+#define DAC_NOTE_G1 6694
+#define DAC_NOTE_GS1 6319
+#define DAC_NOTE_A1 5964
+#define DAC_NOTE_AS1 5629
+#define DAC_NOTE_B1 5313
+#define DAC_NOTE_C2 5015
+#define DAC_NOTE_CS2 4733
+#define DAC_NOTE_D2 4467
+#define DAC_NOTE_DS2 4217
+#define DAC_NOTE_E2 3980
+#define DAC_NOTE_F2 3756
+#define DAC_NOTE_FS2 3545
+#define DAC_NOTE_G2 3346
+#define DAC_NOTE_GS2 3158
+#define DAC_NOTE_A2 2981
+#define DAC_NOTE_AS2 2814
+#define DAC_NOTE_B2 2656
+#define DAC_NOTE_C3 2506
+#define DAC_NOTE_CS3 2366
+#define DAC_NOTE_D3 2233
+#define DAC_NOTE_DS3 2107
+#define DAC_NOTE_E3 1989
+#define DAC_NOTE_F3 1877
+#define DAC_NOTE_FS3 1772
+#define DAC_NOTE_G3 1672
+#define DAC_NOTE_GS3 1578
+#define DAC_NOTE_A3 1489
+#define DAC_NOTE_AS3 1406
+#define DAC_NOTE_B3 1327
+#define DAC_NOTE_C4 1252
+#define DAC_NOTE_CS4 1182
+#define DAC_NOTE_D4 1115
+#define DAC_NOTE_DS4 1053
+#define DAC_NOTE_E4 993
+#define DAC_NOTE_F4 938
+#define DAC_NOTE_FS4 885
+#define DAC_NOTE_G4 835
+#define DAC_NOTE_GS4 788
+#define DAC_NOTE_A4 744
+#define DAC_NOTE_AS4 702
+#define DAC_NOTE_B4 662
+#define DAC_NOTE_C5 625
+#define DAC_NOTE_CS5 590
+#define DAC_NOTE_D5 557
+#define DAC_NOTE_DS5 525
+#define DAC_NOTE_E5 496
+#define DAC_NOTE_F5 468
+#define DAC_NOTE_FS5 441
+#define DAC_NOTE_G5 417
+#define DAC_NOTE_GS5 393
+#define DAC_NOTE_A5 371
+#define DAC_NOTE_AS5 350
+#define DAC_NOTE_B5 330
+#define DAC_NOTE_C6 312
+#define DAC_NOTE_CS6 294
+#define DAC_NOTE_D6 277
+#define DAC_NOTE_DS6 262
+#define DAC_NOTE_E6 247
+#define DAC_NOTE_F6 233
+#define DAC_NOTE_FS6 220
+#define DAC_NOTE_G6 207
+#define DAC_NOTE_GS6 196
+#define DAC_NOTE_A6 184
+#define DAC_NOTE_AS6 174
+#define DAC_NOTE_B6 164
+#define DAC_NOTE_C7 155
+#define DAC_NOTE_CS7 146
+#define DAC_NOTE_D7 138
+#define DAC_NOTE_DS7 130
+#define DAC_NOTE_E7 122
+#define DAC_NOTE_F7 115
+#define DAC_NOTE_FS7 109
+#define DAC_NOTE_G7 103
+#define DAC_NOTE_GS7 97
+#define DAC_NOTE_A7 91
+#define DAC_NOTE_AS7 86
+#define DAC_NOTE_B7 81
+#define DAC_NOTE_C8 76
+#define DAC_NOTE_CS8 72
+#define DAC_NOTE_D8 68
+#define DAC_NOTE_DS8 64
+#define DAC_NOTE_E8 60
+#define DAC_NOTE_F8 57
+#define DAC_NOTE_FS8 53
+#define DAC_NOTE_G8 50
+#define DAC_NOTE_GS8 47
+#define DAC_NOTE_A8 45
+#define DAC_NOTE_AS8 42
+#define DAC_NOTE_B8 40
+#define DAC_NOTE_C9 37
+#define DAC_NOTE_CS9 35
+#define DAC_NOTE_D9 33
+#define DAC_NOTE_DS9 31
+#define DAC_NOTE_E9 29
+#define DAC_NOTE_F9 27
+#define DAC_NOTE_FS9 26
+#define DAC_NOTE_G9 24
+#define DAC_NOTE_GS9 23
+#define DAC_NOTE_A9 21
+#define DAC_NOTE_AS9 20
+#define DAC_NOTE_B9 19
+
+
+#endif /* INC_PITCHESDAC_H_ */
