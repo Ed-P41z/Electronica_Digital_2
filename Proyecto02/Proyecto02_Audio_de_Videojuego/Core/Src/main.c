@@ -18,14 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "pitchesPRE.h"
 #include <stdio.h>
-#include "fatfs_sd.h"
 #include "string.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,20 +36,7 @@
 /* USER CODE BEGIN PD */
 #define TIM_FREQ 84000000
 #define ARR_pwm 100
-FATFS fs;
-FATFS *pfs;
-FIL fil;
-FRESULT fres;
-DWORD fre_clust;
-uint32_t totalSpace, freeSpace;
-char buffer[100];
 
-#define BTN_LEFT    (1 << 5)
-#define BTN_RIGHT   (1 << 4)
-#define BTN_UP      (1 << 3)
-#define BTN_DOWN    (1 << 2)
-#define BTN_SQUARE  (1 << 1)
-#define BTN_X       (1 << 0)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -59,13 +45,10 @@ char buffer[100];
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-SPI_HandleTypeDef hspi1;
-
 TIM_HandleTypeDef htim1;
 
-UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
-UART_HandleTypeDef huart6;
+UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
 int level_intro[] = {
@@ -145,7 +128,7 @@ int level_stats[] = {
 };
 
 int level_stats_dur[] = {
-		300, 300, 300, 200, 200, 200, 600, 500
+		500, 500, 500, 350, 350, 350, 1000, 900
 };
 
 int mario_dead[] = {
@@ -176,14 +159,11 @@ int level_win_dur[] = {
 
 
 uint8_t menu = 1;
+volatile uint8_t intro = 0;
 volatile uint8_t ctrl_state1;
 volatile uint8_t ctrl_cmd2;
-volatile uint8_t ctrl_state6;
  uint8_t rx_data1;
  uint8_t rx_data2;
- uint8_t rx_data6;
- uint8_t prev_state1 = 0;
- uint8_t prev_state2 = 0;
 
 /* USER CODE END PV */
 
@@ -192,17 +172,12 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_USART6_UART_Init(void);
-static void MX_USART1_UART_Init(void);
-static void MX_SPI1_Init(void);
+static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 int presForFrequency(int frequency);
 void playTone(int *tone, int *duration, int *pause, int size);
 void playTonePRE(int *tone, int *duration, int *pause, int size);
 void noTone(void);
-void FixColorEndianness(uint16_t *buffer, uint32_t size);
-void Dibujar_Imagen_Bin(char* nombre, uint16_t x, uint16_t y, uint16_t w, uint16_t h);
-void transmit_uart(char *string);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -268,56 +243,6 @@ void noTone(void)
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0);
 }
 
-void FixColorEndianness(uint16_t *buffer, uint32_t size) {
-    for (uint32_t i = 0; i < size; i++) {
-        buffer[i] = (buffer[i] << 8) | (buffer[i] >> 8);
-    }
-}
-
-void Dibujar_Imagen_Bin(char* nombre, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    FIL fil;
-    UINT bytesRead;
-    uint16_t fila_buffer[320]; // Máximo ancho de pantalla
-
-    // 1. Deseleccionar LCD antes de hablar con la SD
-    //HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET);   // LCD OFF
-    HAL_GPIO_WritePin(SD_SS_GPIO_Port, SD_SS_Pin, GPIO_PIN_RESET);   // SD ON
-    HAL_Delay(1);
-
-    if (f_open(&fil, nombre, FA_READ) == FR_OK) {
-        transmit_uart("Archivo abierto correctamente\n");
-
-        for (int i = 0; i < h; i++) {
-            // f_read leerá los datos de la SD
-            if (f_read(&fil, fila_buffer, w * 2, &bytesRead) == FR_OK /*&& bytesRead > 0*/) {
-
-                // 2. Ahora vamos a hablar con el LCD: Deseleccionar SD, Seleccionar LCD
-                //HAL_GPIO_WritePin(SD_SS_GPIO_Port, SD_SS_Pin, GPIO_PIN_SET); // SD OFF
-                //HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_RESET); // LCD ON
-
-                // Corregir colores (Si el Python ya lo da bien, prueba comentar esta linea si se ve raro)
-                FixColorEndianness(fila_buffer, w);
-
-                // Dibujar fila
-                //LCD_Bitmap(x, y + i, w, 1, (uint16_t*)fila_buffer);
-
-                // 3. Volver a habilitar SD para la siguiente lectura
-                //HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET); // LCD OFF
-                //HAL_GPIO_WritePin(SD_SS_GPIO_Port, SD_SS_Pin, GPIO_PIN_RESET); // SD ON
-            }
-        }
-        f_close(&fil);
-        //HAL_GPIO_WritePin(SD_SS_GPIO_Port, SD_SS_Pin, GPIO_PIN_SET); // All OFF al final
-    } else {
-        transmit_uart("Error: No se pudo abrir el archivo .bin\n");
-    }
-}
-
-void transmit_uart(char *string)
-{
-	uint8_t len = strlen(string);
-	HAL_UART_Transmit(&huart2,(uint8_t*)string, len,200);
-}
 
 /* USER CODE END 0 */
 
@@ -352,216 +277,78 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_TIM1_Init();
-  MX_USART6_UART_Init();
-  MX_USART1_UART_Init();
-  MX_SPI1_Init();
-  MX_FATFS_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
-  HAL_UART_Receive_IT(&huart1, &rx_data1, 1);
+  HAL_UART_Receive_IT(&huart3, &rx_data1, 1);
   HAL_UART_Receive_IT(&huart2, &rx_data2, 1);
-  HAL_UART_Receive_IT(&huart6, &rx_data6, 1);
   noTone();
 
-  HAL_GPIO_WritePin(SD_SS_GPIO_Port, SD_SS_Pin, GPIO_PIN_SET);   // SD Desactivada (High)
-  HAL_Delay(10);
-
-  fres = f_mount(&fs, "", 1);
-  if (fres == FR_OK) {
-	  transmit_uart("SD Montada!\n");
-	  HAL_Delay(100);
-
-	  //Dibujar_Imagen_Bin("halcon.bin", 0, 0, 320, 240);
-
-  } else {
-	  transmit_uart("Error al montar SD\n");
-	  sprintf(buffer, "f_mount error = %d\r\n", fres);
-	  transmit_uart(buffer);
-  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  switch (ctrl_cmd2)
+	  switch (ctrl_state1)
 	  	  {
 	  	  case '1':
-	  		  ctrl_cmd2 = 0;
-	  		  menu = 2;
+	  		  if (intro == 1)
+	  		  {
+	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
+	  			  noTone();
+	  			  intro = 0;
+	  		  }
+	  		  playTonePRE(level_one, level_one_dur, NULL, (sizeof(level_one)/sizeof(level_one[0])));
 	  		  break;
 
 	  	  case '2':
-	  		  ctrl_cmd2 = 0;
-	  		  menu = 3;
+	  		  if (intro == 1)
+	  		  {
+	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
+	  			  noTone();
+	  			  intro = 0;
+	  		  }
+	  		  playTonePRE(level_two, level_two_dur, NULL, (sizeof(level_two)/sizeof(level_two[0])));
 	  		  break;
 
 	  	  case '3':
-	  		  ctrl_cmd2 = 0;
-	  		  menu = 4;
+	  		  if (intro == 1)
+	  		  {
+	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
+	  			  noTone();
+	  			  intro = 0;
+	  		  }
+	  		  playTonePRE(level_three, level_three_dur, NULL, (sizeof(level_three)/sizeof(level_three[0])));
 	  		  break;
 
 	  	  case '4':
-	  		  ctrl_cmd2 = 0;
-	  		  menu = 5;
+	  		  if (intro == 1)
+	  		  {
+	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
+	  			  noTone();
+	  			  intro = 0;
+	  		  }
+	  		  playTonePRE(level_four, level_four_dur, NULL, (sizeof(level_four)/sizeof(level_four[0])));
 	  		  break;
-	  	  }
 
-	  	  if (menu == 1)
-	  	  {
-	  		  menu = 0;
-	  		  HAL_UART_Transmit(&huart2, (uint8_t*)"Seleccione la melodia que desea escuchar:\r\n", 43, 1000);
-	  		  HAL_UART_Transmit(&huart2, (uint8_t*)"1.- Melodia 1\r\n", 21, 1000);
-	  		  HAL_UART_Transmit(&huart2, (uint8_t*)"2.- Melodia 2\r\n", 21, 1000);
-	  		  HAL_UART_Transmit(&huart2, (uint8_t*)" \r\n", 3, 1000);
-	  	  }
-	  	  else if (menu == 2)
-	  	  {
-	  		  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
-	  		  noTone();
-	  		  //__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0);
-	  		  menu = 1;
-	  	  }
-	  	  else if (menu == 3)
-	  	  {
-	  		  playTonePRE(hammer_time, hammer_time_dur, NULL, (sizeof(hammer_time)/sizeof(hammer_time[0])));
-	  		  noTone();
-	  		  menu = 1;
-	  	  }
-	  	  else if (menu == 4)
-	  	  {
-	  		  playTonePRE(level_one, level_one_dur, NULL, (sizeof(level_one)/sizeof(level_one[0])));
-	  		  noTone();
-	  		  menu = 1;
-	  	  }
-	  	  else if (menu == 5)
-	  	  {
+	  	  case 'M':
 	  		  playTonePRE(level_stats, level_stats_dur, NULL, (sizeof(level_stats)/sizeof(level_stats[0])));
-	  		  noTone();
-	  		  menu = 1;
+	  		break;
+
+	  	  case 'D':
+	  		  playTonePRE(mario_dead, mario_dead_dur, NULL, (sizeof(mario_dead)/sizeof(mario_dead[0])));
+	  		break;
+
+	  	  case 'V':
+	  		playTonePRE(game_win, game_win_dur, NULL, (sizeof(game_win)/sizeof(game_win[0])));
+	  		break;
 	  	  }
 
-	  	 if (ctrl_state1 != prev_state1)
-	  		  {
-	  		      uint8_t changed = ctrl_state1 ^ prev_state1;
+	  if (ctrl_cmd2 == 's'){
+		  playTonePRE(game_win, game_win_dur, NULL, (sizeof(game_win)/sizeof(game_win[0])));
+	  }
 
-	  		      // X cambió
-	  		      if (changed & BTN_X)
-	  		      {
-	  		          if (ctrl_state1 & BTN_X)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:X PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:X RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Square cambió
-	  		      if (changed & BTN_SQUARE)
-	  		      {
-	  		          if (ctrl_state1 & BTN_SQUARE)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:C PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:C RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Up cambió
-	  		      if (changed & BTN_UP)
-	  		      {
-	  		          if (ctrl_state1 & BTN_UP)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:U PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:U RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Down cambió
-	  		      if (changed & BTN_DOWN)
-	  		      {
-	  		          if (ctrl_state1 & BTN_DOWN)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:D PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:D RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Right cambió
-	  		      if (changed & BTN_RIGHT)
-	  		      {
-	  		          if (ctrl_state1 & BTN_RIGHT)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:R PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:R RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Left cambió
-	  		      if (changed & BTN_LEFT)
-	  		      {
-	  		          if (ctrl_state1 & BTN_LEFT)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:L PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C1:L RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      prev_state1 = ctrl_state1;
-	  		  }
-
-	  	 if (ctrl_state6 != prev_state2)
-	  		  {
-	  		      uint8_t changed = ctrl_state6 ^ prev_state2;
-
-	  		      // X cambió
-	  		      if (changed & BTN_X)
-	  		      {
-	  		          if (ctrl_state6 & BTN_X)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:X PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:X RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Square cambió
-	  		      if (changed & BTN_SQUARE)
-	  		      {
-	  		          if (ctrl_state6 & BTN_SQUARE)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:C PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:C RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Up cambió
-	  		      if (changed & BTN_UP)
-	  		      {
-	  		          if (ctrl_state6 & BTN_UP)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:U PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:U RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Down cambió
-	  		      if (changed & BTN_DOWN)
-	  		      {
-	  		          if (ctrl_state6 & BTN_DOWN)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:D PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:D RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Right cambió
-	  		      if (changed & BTN_RIGHT)
-	  		      {
-	  		          if (ctrl_state6 & BTN_RIGHT)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:R PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:R RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      // Left cambió
-	  		      if (changed & BTN_LEFT)
-	  		      {
-	  		          if (ctrl_state6 & BTN_LEFT)
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:L PRESSED\r\n", 14, 1000);
-	  		          else
-	  		              HAL_UART_Transmit(&huart2, (uint8_t*)"C2:L RELEASED\r\n", 15, 1000);
-	  		      }
-
-	  		      prev_state2 = ctrl_state6;
-	  		  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -614,44 +401,6 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-}
-
-/**
-  * @brief SPI1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI1_Init(void)
-{
-
-  /* USER CODE BEGIN SPI1_Init 0 */
-
-  /* USER CODE END SPI1_Init 0 */
-
-  /* USER CODE BEGIN SPI1_Init 1 */
-
-  /* USER CODE END SPI1_Init 1 */
-  /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI1_Init 2 */
-
-  /* USER CODE END SPI1_Init 2 */
-
 }
 
 /**
@@ -729,39 +478,6 @@ static void MX_TIM1_Init(void)
 }
 
 /**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART1_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART1_Init 0 */
-
-  /* USER CODE END USART1_Init 0 */
-
-  /* USER CODE BEGIN USART1_Init 1 */
-
-  /* USER CODE END USART1_Init 1 */
-  huart1.Instance = USART1;
-  huart1.Init.BaudRate = 115200;
-  huart1.Init.WordLength = UART_WORDLENGTH_8B;
-  huart1.Init.StopBits = UART_STOPBITS_1;
-  huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_TX_RX;
-  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART1_Init 2 */
-
-  /* USER CODE END USART1_Init 2 */
-
-}
-
-/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -795,35 +511,35 @@ static void MX_USART2_UART_Init(void)
 }
 
 /**
-  * @brief USART6 Initialization Function
+  * @brief USART3 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_USART6_UART_Init(void)
+static void MX_USART3_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART6_Init 0 */
+  /* USER CODE BEGIN USART3_Init 0 */
 
-  /* USER CODE END USART6_Init 0 */
+  /* USER CODE END USART3_Init 0 */
 
-  /* USER CODE BEGIN USART6_Init 1 */
+  /* USER CODE BEGIN USART3_Init 1 */
 
-  /* USER CODE END USART6_Init 1 */
-  huart6.Instance = USART6;
-  huart6.Init.BaudRate = 115200;
-  huart6.Init.WordLength = UART_WORDLENGTH_8B;
-  huart6.Init.StopBits = UART_STOPBITS_1;
-  huart6.Init.Parity = UART_PARITY_NONE;
-  huart6.Init.Mode = UART_MODE_TX_RX;
-  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart6) != HAL_OK)
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART6_Init 2 */
+  /* USER CODE BEGIN USART3_Init 2 */
 
-  /* USER CODE END USART6_Init 2 */
+  /* USER CODE END USART3_Init 2 */
 
 }
 
@@ -869,33 +585,24 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	if (huart->Instance == USART1) // Control 1
+	if (huart->Instance == USART3) // Control 1
 	    {
 	    	ctrl_state1 = rx_data1;
+	    	intro = 1;
 
-	        //HAL_UART_Transmit(&huart2, &ctrl_state1, 1, 100);
+	        HAL_UART_Transmit(&huart2, &ctrl_state1, 1, 100);
 
-	        HAL_UART_Receive_IT(&huart1, &rx_data1, 1);
+	        HAL_UART_Receive_IT(&huart3, &rx_data1, 1);
 	    }
 
     if (huart->Instance == USART2) // Terminal para pruebas
     {
     	ctrl_cmd2 = rx_data2;
 
-        //HAL_UART_Transmit(&huart2, &rx_data, 1, 100);
+        HAL_UART_Transmit(&huart2, &rx_data2, 1, 100);
 
         HAL_UART_Receive_IT(&huart2, &rx_data2, 1);
     }
-
-    if (huart->Instance == USART6) // Control 2
-        {
-        	ctrl_state6 = rx_data6;
-
-            //HAL_UART_Transmit(&huart2, &ctrl_state6, 1, 100);
-
-            HAL_UART_Receive_IT(&huart6, &rx_data6, 1);
-        }
-
 }
 /* USER CODE END 4 */
 

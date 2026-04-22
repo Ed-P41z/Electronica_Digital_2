@@ -38,8 +38,7 @@ typedef enum {
     ESTADO_NIVEL_1,
     ESTADO_NIVEL_2,
 	ESTADO_NIVEL_3,
-	ESTADO_NIVEL_4,
-    ESTADO_GAMEOVER
+	ESTADO_NIVEL_4
 } EstadoJuego;
 
 typedef struct {
@@ -57,7 +56,6 @@ typedef struct {
 typedef enum {
     BARRIL_RODANDO,
     BARRIL_BAJANDO_ESC,
-    BARRIL_CAYENDO // Por si cae
 } EstadoBarril;
 
 typedef struct {
@@ -160,6 +158,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
+UART_HandleTypeDef huart3;
 UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
@@ -227,19 +226,6 @@ uint8_t jugadores = 1;
 uint8_t nivel = 1;
 
 // ------------- Posiciones de mario (actual y anterior) -------------
-//int mario_x = 0;
-//int mario_y = 210;
-int mario_x = 15;
-int mario_y = 279;
-int mario_x_ant = 50;
-int mario_y_ant = 50;
-int mario_flip = 0;
-int mario_y_past = 0;
-
-uint8_t mario_muriendo = 0;
-uint8_t muerte_frame = 0;
-uint8_t muerte_tick = 0;
-
 #define LVL2_MARIO_START_X 15
 
 int mario_cayendo = 0;
@@ -543,6 +529,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART6_UART_Init(void);
+static void MX_USART3_UART_Init(void);
 /* USER CODE BEGIN PFP */
 static inline int MaxBarrilesActivosNivel1(void);
 void actualizarY_Personaje(Personaje *p);
@@ -556,7 +543,6 @@ void ProcesarMovimientoNivel1(Personaje *p);
 int alturaPlataformaEnX(int idx, int x);
 int detectarPlataforma(int x, int y);
 int direccionPlataforma(int idx);
-int escaleraConectaPlataformas(int esc, int p_sup, int p_inf);
 int plataformaInferiorDeEscalera(int esc, int plataforma_actual);
 int elegirEscaleraObjetivo(Barril *b);
 int alturaPisoPlataformaEnX(int idx, int x);
@@ -576,41 +562,33 @@ void RestaurarRectNivel1(int rx, int ry, int rw, int rh);
 void DibujarDecoracionNivel2(void);
 void DibujarNivel2Tileado(void);
 void RestaurarRectNivel2(int rx, int ry, int rw, int rh);
-int actualizarY_Mario_N2(void);
 
 void InicializarFuegosNivel2(void);
 void ActualizarFuegosNivel2(void);
 void DibujarFuegosNivel2(void);
-void ColisionMarioFuegosNivel2(void);
 
 int actualizarY_Personaje_N2(Personaje *p);
 void ProcesarMovimientoNivel2(Personaje *p);
 void ColisionPersonajeFuegosNivel2(Personaje *p);
-int PersonajeEnPlataformaVictoria_N2(Personaje *p);
-void DibujarPersonajeNivel2(Personaje *p, int frame);
 
 void DibujarDecoracionNivel3(void);
 void DibujarNivel3Tileado(void);
 void RestaurarRectNivel3(int rx, int ry, int rw, int rh);
-int actualizarY_Mario_N3(void);
 
 void InicializarFuegosNivel3(void);
 void ActualizarFuegosNivel3(void);
 void DibujarFuegosNivel3(void);
-void ColisionMarioFuegosNivel3(void);
 
 int actualizarY_Personaje_N3(Personaje *p);
 void ProcesarMovimientoNivel3(Personaje *p);
 void ColisionPersonajeFuegosNivel3(Personaje *p);
 
-int actualizarY_Mario_N4(void);
 void RestaurarRectNivel4(int rx, int ry, int rw, int rh);
 void DibujarNivel4Tileado(void);
 
 void InicializarFuegosNivel4(void);
 void ActualizarFuegosNivel4(void);
 void DibujarFuegosNivel4(void);
-void ColisionMarioFuegosNivel4(void);
 
 int actualizarY_Personaje_N4(Personaje *p);
 void ProcesarMovimientoNivel4(Personaje *p);
@@ -1023,10 +1001,6 @@ int hayColision(int x1, int y1, int w1, int h1,
 }
 
 void iniciarMuerteMario(void) {
-    mario_muriendo = 1;
-    muerte_frame = 0;
-    muerte_tick = 0;
-
     jumpState = 0;
     jumpProgress = 0;
     inercia_x = 0;
@@ -1035,7 +1009,6 @@ void iniciarMuerteMario(void) {
 
     mario_actual = mario_muere;
     mario_ancho_hoja = 80;   // 5 frames x 16 px
-    mario_flip = 0;
 }
 void reiniciarJuego(void) {
     // Limpiar barriles activos
@@ -1052,33 +1025,6 @@ void reiniciarJuego(void) {
         barriles[i].escalera_objetivo = -1;
         barriles[i].dir = 1;
     }
-
-    // Reiniciar globals viejos de Mario
-    mario_x = 15;
-    mario_y = 287;
-    mario_x_ant = mario_x;
-    mario_y_ant = mario_y;
-    mario_flip = 0;
-    mario_y_past = mario_y;
-
-    mario_actual = mario_camina;
-    mario_ancho_hoja = 48;
-    anim = 0;
-
-    jumpState = 0;
-    jumpProgress = 0;
-    inercia_x = 0;
-    mario_sube = 0;
-    comando = '0';
-
-    mario_muriendo = 0;
-    muerte_frame = 0;
-    muerte_tick = 0;
-
-    mario_cayendo = 0;
-    mario_vel_caida = 0;
-    mario_y_objetivo = 0;
-
     // Reiniciar personajes multiplayer
     p1.x = 15;
     p1.y = 219;
@@ -1321,38 +1267,6 @@ void RestaurarRectNivel2(int rx, int ry, int rw, int rh)
     }
 }
 
-int actualizarY_Mario_N2(void)
-{
-    int viga_encontrada = -1;
-    int menor_distancia = 1000;
-    int checkX = mario_x + 8;
-
-    for (int i = 0; i < numPlataformas_actual; i++) {
-        if (checkX >= plataformas_actuales[i].x1 && checkX <= plataformas_actuales[i].x2) {
-            int y_teorico = alturaPlataformaEnX(i, checkX);
-
-            // En nivel 2 solo acepta plataformas al mismo nivel o debajo de Mario
-            int distancia = y_teorico - mario_y;
-
-            if (distancia >= 0 && distancia <= 10 && distancia < menor_distancia) {
-                menor_distancia = distancia;
-                viga_encontrada = i;
-                mario_y_objetivo = y_teorico;
-            }
-        }
-    }
-
-    if (viga_encontrada != -1) {
-        mario_y = mario_y_objetivo;
-        mario_cayendo = 0;
-        mario_vel_caida = 0;
-        return 1;
-    }
-
-    mario_cayendo = 1;
-    return 0;
-}
-
 void InicializarFuegosNivel2(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         fuegos[i].activo = 0;
@@ -1438,20 +1352,6 @@ void DibujarFuegosNivel2(void) {
             0x0000,
             0
         );
-    }
-}
-
-void ColisionMarioFuegosNivel2(void) {
-    if (mario_muriendo) return;
-
-    for (int i = 0; i < MAX_FUEGOS; i++) {
-        if (!fuegos[i].activo) continue;
-
-        if (hayColision(mario_x, mario_y, 16, 16,
-                        fuegos[i].x + 3, fuegos[i].y + 3, 10, 10)) {
-            iniciarMuerteMario();
-            break;
-        }
     }
 }
 
@@ -1655,36 +1555,6 @@ void RestaurarRectNivel3(int rx, int ry, int rw, int rh)
     DibujarDecoracionNivel3();
 }
 
-int actualizarY_Mario_N3(void)
-{
-    int viga_encontrada = -1;
-    int menor_distancia = 1000;
-    int checkX = mario_x + 8; // Centro de Mario
-
-    for (int i = 0; i < numPlataformas_actual; i++) {
-        if (checkX >= plataformas_actuales[i].x1 && checkX <= plataformas_actuales[i].x2) {
-            int y_teorico = alturaPlataformaEnX(i, checkX);
-
-            // Calculamos distancia: viga - pies de mario
-            int distancia = y_teorico - mario_y;
-
-            // IMPORTANTE: Permitimos un rango pequeño negativo (-2) por si Mario
-            // "atraviesa" la viga un poquito entre frames.
-            if (distancia >= -4 && distancia <= 10 && abs(distancia) < menor_distancia) {
-                menor_distancia = abs(distancia);
-                viga_encontrada = i;
-                mario_y_objetivo = y_teorico;
-            }
-        }
-    }
-
-    if (viga_encontrada != -1) {
-        // NO asignamos mario_y aquí todavía, solo devolvemos éxito
-        return 1;
-    }
-    return 0;
-}
-
 void DibujarFuegosNivel3(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1767,20 +1637,6 @@ void InicializarFuegosNivel3(void) {
     fuegos[2].y = ruta_fuego_6[0].y0;
     fuegos[2].x_ant = fuegos[2].x;
     fuegos[2].y_ant = fuegos[2].y;
-}
-
-void ColisionMarioFuegosNivel3(void) {
-    if (mario_muriendo) return;
-
-    for (int i = 0; i < MAX_FUEGOS; i++) {
-        if (!fuegos[i].activo) continue;
-
-        if (hayColision(mario_x, mario_y, 16, 16,
-                        fuegos[i].x + 3, fuegos[i].y + 3, 10, 10)) {
-            iniciarMuerteMario();
-            break;
-        }
-    }
 }
 
 int actualizarY_Personaje_N3(Personaje *p)
@@ -1985,38 +1841,6 @@ void RestaurarRectNivel4(int rx, int ry, int rw, int rh) {
     }
 }
 
-int actualizarY_Mario_N4(void)
-{
-    int viga_encontrada = -1;
-    int menor_distancia = 1000;
-    int checkX = mario_x + 8;
-
-    for (int i = 0; i < numPlataformas_actual; i++) {
-        if (checkX >= plataformas_actuales[i].x1 && checkX <= plataformas_actuales[i].x2) {
-            int y_teorico = alturaPlataformaEnX(i, checkX);
-
-            // Igual que nivel 2: solo acepta plataformas al mismo nivel o debajo
-            int distancia = y_teorico - mario_y;
-
-            if (distancia >= 0 && distancia <= 10 && distancia < menor_distancia) {
-                menor_distancia = distancia;
-                viga_encontrada = i;
-                mario_y_objetivo = y_teorico;
-            }
-        }
-    }
-
-    if (viga_encontrada != -1) {
-        mario_y = mario_y_objetivo;
-        mario_cayendo = 0;
-        mario_vel_caida = 0;
-        return 1;
-    }
-
-    mario_cayendo = 1;
-    return 0;
-}
-
 void InicializarFuegosNivel4(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         fuegos[i].activo = 0;
@@ -2102,20 +1926,6 @@ void DibujarFuegosNivel4(void) {
             0x0000,
             0
         );
-    }
-}
-
-void ColisionMarioFuegosNivel4(void) {
-    if (mario_muriendo) return;
-
-    for (int i = 0; i < MAX_FUEGOS; i++) {
-        if (!fuegos[i].activo) continue;
-
-        if (hayColision(mario_x, mario_y, 16, 16,
-                        fuegos[i].x + 3, fuegos[i].y + 3, 10, 10)) {
-            iniciarMuerteMario();
-            break;
-        }
     }
 }
 
@@ -2387,6 +2197,7 @@ void ConfirmarSeleccionMenu(void) {
 
 void victoria(void) {
     if (!victoria_pintada) {
+    	HAL_UART_Transmit(&huart3, (uint8_t*)"V", 1, 1000);
         LCD_Clear(0x0000);
         Dibujar_Imagen_Bin("ganaste.bin", 0, 0, 320, 240);
         victoria_pintada = 1;
@@ -2452,6 +2263,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART6_UART_Init();
   MX_FATFS_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   LCD_Init();
   LCD_Clear(0x0000);
@@ -2601,6 +2413,8 @@ int main(void)
 		                            DibujarSelectorMenu();
 		                            menu_print = 0;
 		                            cambioDePantalla = 0;
+		                            HAL_UART_Transmit(&huart3, (uint8_t*)"M", 1, 1000);
+		                            //HAL_UART_Transmit(&huart2, (uint8_t*)"M", 1, 1000);
 		                        }
 
 		                        if (menu_up == 1) {
@@ -2665,6 +2479,8 @@ int main(void)
 // === NIVEL 1 ===================================================================================
 		                case ESTADO_NIVEL_1:
 		                    if (cambioDePantalla) {
+		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"1", 1, 1000);
+
 		                        LCD_Clear(0x0000);
 
 		                        plataformas_actuales = nivel1;
@@ -2811,6 +2627,7 @@ int main(void)
 		                            p1.tick = 0;
 		                            p1.frame++;
 		                            if (p1.frame >= 5) {
+		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
 		                                reiniciarJuego();
 		                                break;
 		                            }
@@ -2855,6 +2672,20 @@ int main(void)
 		                    int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
 		                    int redraw_p2 = (jugadores == 2) &&
 		                                    (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
+
+		                    if (!p1.muriendo && !victoria_activa) {
+		                        if (marioEnPlataformaVictoria_P(&p1, 0)) {
+		                            victoria_activa = 1;
+		                            break;
+		                        }
+		                    }
+
+		                    if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
+		                        if (marioEnPlataformaVictoria_P(&p2, 0)) {
+		                            victoria_activa = 1;
+		                            break;
+		                        }
+		                    }
 
 		                    // --- 6. RESTAURAR TODO LO VIEJO PRIMERO ---
 
@@ -2996,6 +2827,8 @@ int main(void)
 // === Nivel 2 ========================================================================================
 		                case ESTADO_NIVEL_2:
 		                    if (cambioDePantalla) {
+		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"2", 1, 1000);
+
 		                        DibujarNivel2Tileado();
 
 		                        plataformas_actuales = nivel2;
@@ -3123,6 +2956,7 @@ int main(void)
 		                            if (p1.frame < 4) {
 		                                p1.frame++;
 		                            } else {
+		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
 		                                reiniciarJuego();
 		                                break;
 		                            }
@@ -3269,6 +3103,8 @@ int main(void)
 // === Nivel 3 =========================================================================================
 		                case ESTADO_NIVEL_3:
 		                    if (cambioDePantalla) {
+		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"3", 1, 1000);
+
 		                        DibujarNivel3Tileado();
 
 		                        plataformas_actuales = nivel3;
@@ -3396,6 +3232,7 @@ int main(void)
 		                            if (p1.frame < 4) {
 		                                p1.frame++;
 		                            } else {
+		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
 		                                reiniciarJuego();
 		                                break;
 		                            }
@@ -3553,6 +3390,8 @@ int main(void)
 // === Nivel 4 ===================================================================================
 		                case ESTADO_NIVEL_4:
 		                    if (cambioDePantalla) {
+		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"4", 1, 1000);
+
 		                        DibujarNivel4Tileado();
 
 		                        plataformas_actuales = nivel4;
@@ -3680,6 +3519,7 @@ int main(void)
 		                            if (p1.frame < 4) {
 		                                p1.frame++;
 		                            } else {
+		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
 		                                reiniciarJuego();
 		                                break;
 		                            }
@@ -3981,6 +3821,39 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
+  * @brief USART3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART3_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART3_Init 0 */
+
+  /* USER CODE END USART3_Init 0 */
+
+  /* USER CODE BEGIN USART3_Init 1 */
+
+  /* USER CODE END USART3_Init 1 */
+  huart3.Instance = USART3;
+  huart3.Init.BaudRate = 115200;
+  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.StopBits = UART_STOPBITS_1;
+  huart3.Init.Parity = UART_PARITY_NONE;
+  huart3.Init.Mode = UART_MODE_TX_RX;
+  huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart3.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART3_Init 2 */
+
+  /* USER CODE END USART3_Init 2 */
 
 }
 
