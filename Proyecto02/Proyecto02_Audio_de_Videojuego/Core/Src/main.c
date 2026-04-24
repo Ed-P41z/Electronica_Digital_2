@@ -51,6 +51,8 @@ UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
+
+// Melodía de introducción
 int level_intro[] = {
 		NOTE_C4, NOTE_D4, NOTE_DS4, NOTE_C4,
 		NOTE_G4, NOTE_FS4, NOTE_G4, NOTE_FS4,
@@ -63,22 +65,8 @@ int level_intro_dur[] = {
 		100, 100, 100, 100, 500
 };
 
-int hammer_time[] = {
-		NOTE_AS4, 0, NOTE_AS4, 0, NOTE_AS4, 0, NOTE_AS4, 0, NOTE_AS4, 0,
-		NOTE_D5, NOTE_AS4, NOTE_D5, NOTE_AS4, 0,
-
-		NOTE_D5, 0, NOTE_D5, 0, NOTE_D5, 0, NOTE_D5, 0, NOTE_D5, 0,
-		NOTE_F5, NOTE_D5, NOTE_F5, NOTE_D5, 0
-};
-
-int hammer_time_dur[] = {
-		150, 5, 110, 5, 110, 5, 110, 5, 110, 5,
-		125, 125, 125, 125, 5,
-
-		150, 5, 110, 5, 110, 5, 110, 5, 110, 5,
-		125, 125, 125, 125, 10
-};
-
+// Melodía de niveles:
+// Nivel 1
 int level_one[] = {
 		NOTE_AS3, NOTE_D4, NOTE_F4, NOTE_G4, NOTE_F4
 };
@@ -87,6 +75,7 @@ int level_one_dur[] = {
 		500, 400, 200, 200, 200
 };
 
+// Nivel 2
 int level_two[] = {
 		NOTE_D2, 0, NOTE_D2, 0, NOTE_D2, 0
 };
@@ -95,6 +84,7 @@ int level_two_dur[] = {
 		100, 50, 100, 50, 100, 100
 };
 
+// Nivel 3
 int level_three[] = {
 		NOTE_AS5, 0, NOTE_DS5, 0, NOTE_AS4, 0
 };
@@ -103,6 +93,7 @@ int level_three_dur[] = {
 		150, 100, 150, 100, 150, 100
 };
 
+// Nivel 4
 int level_four[] = {
 		NOTE_AS1, 0, NOTE_F1, 0, NOTE_F1, 0
 };
@@ -111,6 +102,7 @@ int level_four_dur[] = {
 		100, 50, 50, 25, 50, 25, 50
 };
 
+// Melodía de victoria
 int game_win[] = {
 		NOTE_E4, NOTE_GS4, NOTE_B4, NOTE_CS5, NOTE_C5, NOTE_CS5,
 		NOTE_GS4, NOTE_G5, NOTE_F5, NOTE_D5, NOTE_C5, 0, NOTE_C5, NOTE_F5,
@@ -123,6 +115,7 @@ int game_win_dur[] = {
 		100, 100, 500
 };
 
+// Melidía de Menus
 int level_stats[] = {
 		NOTE_C4, NOTE_D4, NOTE_F4, NOTE_D4, NOTE_C4, NOTE_D4, NOTE_AS3, NOTE_AS4
 };
@@ -131,6 +124,7 @@ int level_stats_dur[] = {
 		500, 500, 500, 350, 350, 350, 1000, 900
 };
 
+// Melodía de muerte de Mario
 int mario_dead[] = {
 		NOTE_B5, NOTE_AS5, NOTE_B5, NOTE_AS5,
 		NOTE_A5, NOTE_GS5, NOTE_A5, NOTE_GS5,
@@ -146,17 +140,6 @@ int mario_dead_dur[] = {
 		50, 50, 50, 50, 50,
 		100, 150, 150, 500
 };
-
-int level_win[] = {
-		NOTE_E5, NOTE_F5, NOTE_G5, 0, NOTE_E5, 0,
-		NOTE_E5, NOTE_F5, NOTE_G5, 0, NOTE_E5,
-};
-
-int level_win_dur[] = {
-		100, 100, 100, 50, 150, 100,
-		100, 100, 100, 50, 150, 100,
-};
-
 
 uint8_t menu = 1;
 volatile uint8_t intro = 0;
@@ -182,6 +165,7 @@ void noTone(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+// Función para obtener las frecuencias para modificar el prescaler
 int presForFrequency(int frequency)
 {
 	if (frequency == 0)
@@ -191,6 +175,7 @@ int presForFrequency(int frequency)
 	return ((TIM_FREQ / (ARR_pwm * frequency)) -1 );
 }
 
+// Función para reproducir la melodía
 void playTone(int *tone, int *duration, int *pause, int size)
 {
 	for (int i = 0; i < size; i++)
@@ -210,6 +195,7 @@ void playTone(int *tone, int *duration, int *pause, int size)
 	}
 }
 
+// Función para reproducir la melodía con Prescaler
 void playTonePRE(int *tone, int *duration, int *pause, int size)
 {
     for (int i = 0; i < size; i++)
@@ -238,6 +224,7 @@ void playTonePRE(int *tone, int *duration, int *pause, int size)
     }
 }
 
+// Función para silenciar el Buzzer
 void noTone(void)
 {
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, 0);
@@ -279,9 +266,12 @@ int main(void)
   MX_TIM1_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+  // Inicializamos el timer correpondiente para el pwm para el sonido
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
+  // Inicializamos los UARTs correspondientes
   HAL_UART_Receive_IT(&huart3, &rx_data1, 1);
   HAL_UART_Receive_IT(&huart2, &rx_data2, 1);
+  // Silencio dle buzzer
   noTone();
 
   /* USER CODE END 2 */
@@ -290,62 +280,75 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  // Dependiendo del comando recibido de la Nucleo Maestra, verificamos qué melodía reproducir
 	  switch (ctrl_state1)
 	  	  {
 	  	  case '1':
 	  		  if (intro == 1)
 	  		  {
+	  			  // Si se ingresa a un nivel se preproduce una única vez la melodía de intro
 	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
 	  			  noTone();
 	  			  intro = 0;
 	  		  }
+	  		  // Se reproduce el nivel 1
 	  		  playTonePRE(level_one, level_one_dur, NULL, (sizeof(level_one)/sizeof(level_one[0])));
 	  		  break;
 
 	  	  case '2':
 	  		  if (intro == 1)
 	  		  {
+	  			// Si se ingresa a un nivel se preproduce una única vez la melodía de intro
 	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
 	  			  noTone();
 	  			  intro = 0;
 	  		  }
+	  		  // Se reproduce el nivel 2
 	  		  playTonePRE(level_two, level_two_dur, NULL, (sizeof(level_two)/sizeof(level_two[0])));
 	  		  break;
 
 	  	  case '3':
 	  		  if (intro == 1)
 	  		  {
+	  			// Si se ingresa a un nivel se preproduce una única vez la melodía de intro
 	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
 	  			  noTone();
 	  			  intro = 0;
 	  		  }
+	  		  // Se reproduce el nivel 3
 	  		  playTonePRE(level_three, level_three_dur, NULL, (sizeof(level_three)/sizeof(level_three[0])));
 	  		  break;
 
 	  	  case '4':
 	  		  if (intro == 1)
 	  		  {
+	  			// Si se ingresa a un nivel se preproduce una única vez la melodía de intro
 	  			  playTonePRE(level_intro, level_intro_dur, NULL, (sizeof(level_intro)/sizeof(level_intro[0])));
 	  			  noTone();
 	  			  intro = 0;
 	  		  }
+	  		  // Se reproduce el nivel 4
 	  		  playTonePRE(level_four, level_four_dur, NULL, (sizeof(level_four)/sizeof(level_four[0])));
 	  		  break;
 
 	  	  case 'M':
+	  		  // Música del menú
 	  		  playTonePRE(level_stats, level_stats_dur, NULL, (sizeof(level_stats)/sizeof(level_stats[0])));
 	  		break;
 
 	  	  case 'D':
+	  		  // Música de muerte
 	  		  playTonePRE(mario_dead, mario_dead_dur, NULL, (sizeof(mario_dead)/sizeof(mario_dead[0])));
 	  		break;
 
 	  	  case 'V':
+	  		  // Música de victoria
 	  		playTonePRE(game_win, game_win_dur, NULL, (sizeof(game_win)/sizeof(game_win[0])));
 	  		break;
 	  	  }
 
 	  if (ctrl_cmd2 == 's'){
+		  // Medida de prueba usando terminal con UART2
 		  playTonePRE(game_win, game_win_dur, NULL, (sizeof(game_win)/sizeof(game_win[0])));
 	  }
 
@@ -585,7 +588,7 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	if (huart->Instance == USART3) // Control 1
+	if (huart->Instance == USART3) // Se recibe por medio de UART3 qué melodía se reproducirá
 	    {
 	    	ctrl_state1 = rx_data1;
 	    	intro = 1;
@@ -595,7 +598,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 	        HAL_UART_Receive_IT(&huart3, &rx_data1, 1);
 	    }
 
-    if (huart->Instance == USART2) // Terminal para pruebas
+    if (huart->Instance == USART2) // Se recibe la prueba para las melodía por la terminal
     {
     	ctrl_cmd2 = rx_data2;
 

@@ -33,6 +33,8 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+// Estados para los modos del juego: Menú, Nivel 1-4.
 typedef enum {
     ESTADO_PORTADA,
     ESTADO_NIVEL_1,
@@ -82,7 +84,7 @@ typedef struct {
     int x, y;
     int x_ant, y_ant;
     int activo;
-    int anim;
+    int anim; // Posiciones de los jugadores.
 
     int ruta_idx;   // en qué salto va
     int t;          // progreso dentro del salto actual
@@ -108,7 +110,7 @@ typedef enum {
     TILE_V25      = 14,
     TILE_V26      = 15,
     TILE_V27      = 16
-} TileID;
+} TileID; // Estructura para armar los tiles de cada menú a utilizar
 
 typedef struct {
     int x, y;
@@ -118,19 +120,20 @@ typedef struct {
     int jumpState;
     int jumpProgress;
     int inercia_x;
-    int sube;       // Reemplaza a mario_sube
+    int sube;       // Condiciones de movimiento de los jugadores
     uint8_t muriendo;
     uint8_t frame;
     uint8_t tick;
     const uint16_t *actual_bmp;
     int ancho_hoja;
-    uint16_t color_transparente; // 0x0000 usualmente
-    uint8_t frame_ant;
+    uint16_t color_transparente;
+    uint8_t frame_ant;	// Condiciones para lógica de jugadores en los niveles
 } Personaje;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// Variables a utilizar para la SD
 FATFS fs;
 FATFS *pfs;
 FIL fil;
@@ -139,6 +142,7 @@ DWORD fre_clust;
 uint32_t totalSpace, freeSpace;
 char buffer[100];
 
+// Definiciones útiles para el funcionamiento de los controles.
 #define BTN_LEFT    (1 << 5)
 #define BTN_RIGHT   (1 << 4)
 #define BTN_UP      (1 << 3)
@@ -425,6 +429,7 @@ int frame_barril;
 Fueguito fuegos[MAX_FUEGOS];
 uint32_t fuego_tick = 0;
 
+// Nivel 2
 const SaltoRuta ruta_fuego_1[] = {
     // Ida
 	{  48, 176,  128, 176, 18, 14 },
@@ -454,6 +459,7 @@ const SaltoRuta ruta_fuego_3[] = {
     { 250,  96, 176,  96, 18, 14 }
 };
 
+// Nivel 3
 const SaltoRuta ruta_fuego_4[] = {
 	// Ida
 	{  48, 160,  128, 168, 18, 14 },
@@ -483,6 +489,8 @@ const SaltoRuta ruta_fuego_6[] = {
     { 250, 88, 200,  88, 18, 14 }
 };
 
+
+// Nivel 4
 const SaltoRuta ruta_fuego_7[] = {
     // Ida
 	{  48, 176,  128, 176, 18, 14 },
@@ -648,10 +656,14 @@ static const uint16_t *const TILESET4[] = {
 	viga_4,		// 2
 };
 
+// Define el límite de barriles activos según el modo de juego.
+// En multijugador se reduce la cantidad para evitar sobrecargar el nivel.
 static inline int MaxBarrilesActivosNivel1(void) {
     return (jugadores == 2) ? 2 : 3;
 }
 
+// Ajusta la posición vertical del personaje para que quede apoyado sobre la plataforma/rampa más cercana.
+// Se usa principalmente en el nivel 1 para mantener a Mario/Luigi alineado con las vigas inclinadas.
 void actualizarY_Personaje(Personaje *p) {
     int viga_encontrada = -1;
     int menor_distancia = 1000;
@@ -677,6 +689,8 @@ void actualizarY_Personaje(Personaje *p) {
     }
 }
 
+// Crea un nuevo barril si todavía no se alcanzó el límite permitido.
+// Inicializa su posición, estado, plataforma actual y dirección de movimiento.
 void crearBarril(void) {
     int activos = 0;
 
@@ -711,6 +725,8 @@ void crearBarril(void) {
     }
 }
 
+// Corrige la posición vertical de un objeto móvil, como un barril, para que siga la altura de la plataforma.
+// Busca la plataforma válida más cercana debajo o cerca del objeto.
 void actualizarY_Objeto(int *obj_x, int *obj_y) {
     int viga_encontrada = -1;
     int menor_distancia = 1000;
@@ -735,6 +751,8 @@ void actualizarY_Objeto(int *obj_x, int *obj_y) {
     }
 }
 
+// Actualiza la lógica completa de los barriles del nivel 1.
+// Controla rodamiento, bajada por escaleras, animación, desaparición en el oil y salida de pantalla.
 void actualizarBarriles(void) {
     for (int i = 0; i < MAX_BARRILES; i++) {
         if (!barriles[i].activo) continue;
@@ -820,6 +838,8 @@ void actualizarBarriles(void) {
     }
 }
 
+// Restaura el fondo donde estaba un barril, recortando el área si el sprite está fuera de los límites visibles.
+// Esto evita intentar dibujar fuera de la pantalla.
 void RestaurarFondoBarrilSeguro(int x, int y) {
     int h_visible = SPRITE_BARRIL;
 
@@ -840,6 +860,8 @@ void RestaurarFondoBarrilSeguro(int x, int y) {
     RestaurarRectNivel1(x, y, SPRITE_BARRIL, h_visible);
 }
 
+// Procesa el movimiento del personaje en el nivel 1.
+// Incluye salto, movimiento con inercia, escaleras, ajuste sobre rampas y límites de pantalla.
 void ProcesarMovimientoNivel1(Personaje *p) {
     if (p->muriendo) return;
 
@@ -892,6 +914,8 @@ void ProcesarMovimientoNivel1(Personaje *p) {
     if (p->x > 320 - 16) p->x = 320 - 16;
 }
 
+// Calcula la altura visual donde debe colocarse el personaje/sprite sobre una plataforma.
+// Si la plataforma está inclinada, interpola la altura según la posición X.
 int alturaPlataformaEnX(int idx, int x) {
     if (plataformas_actuales[idx].y_inicio == plataformas_actuales[idx].y_fin) {
         return plataformas_actuales[idx].y_inicio - 16;
@@ -904,6 +928,8 @@ int alturaPlataformaEnX(int idx, int x) {
     return plataformas_actuales[idx].y_inicio + ((avance * dy) / ancho) - 16;
 }
 
+// Detecta sobre qué plataforma se encuentra un objeto usando su centro horizontal y su altura actual.
+// Devuelve el índice de la plataforma más cercana o -1 si no hay coincidencia.
 int detectarPlataforma(int x, int y) {
     int mejor = -1;
     int menor_dist = 1000;
@@ -924,6 +950,8 @@ int detectarPlataforma(int x, int y) {
     return mejor;
 }
 
+// Determina hacia dónde debe avanzar un barril según la inclinación de la plataforma.
+// El barril se mueve hacia el lado en el que la plataforma baja.
 int direccionPlataforma(int idx) {
     if (plataformas_actuales[idx].y_fin > plataformas_actuales[idx].y_inicio)
         return 1;   // baja hacia la derecha
@@ -931,6 +959,8 @@ int direccionPlataforma(int idx) {
         return -1;  // baja hacia la izquierda
 }
 
+// Indica a qué plataforma inferior llega cada escalera desde una plataforma actual.
+// Esta relación se usa para decidir si un barril puede bajar por una escalera.
 int plataformaInferiorDeEscalera(int esc, int plataforma_actual) {
     switch (esc) {
         case 7: return (plataforma_actual == 0) ? 1 : -1;
@@ -945,6 +975,8 @@ int plataformaInferiorDeEscalera(int esc, int plataforma_actual) {
     }
 }
 
+// Selecciona una escalera válida para que el barril baje.
+// Prioriza las escaleras más cercanas, pero agrega probabilidad para variar el recorrido.
 int elegirEscaleraObjetivo(Barril *b) {
     int candidatos[8];
     int distancias[8];
@@ -980,6 +1012,8 @@ int elegirEscaleraObjetivo(Barril *b) {
     return candidatos[rand() % n];
 }
 
+// Calcula la altura real del piso de una plataforma sin restar el alto del sprite.
+// Es útil cuando se necesita la coordenada exacta de la plataforma.
 int alturaPisoPlataformaEnX(int idx, int x) {
     if (plataformas_actuales[idx].y_inicio == plataformas_actuales[idx].y_fin) {
         return plataformas_actuales[idx].y_inicio;
@@ -992,6 +1026,8 @@ int alturaPisoPlataformaEnX(int idx, int x) {
     return plataformas_actuales[idx].y_inicio + ((avance * dy) / ancho);
 }
 
+// Verifica colisión rectangular entre dos objetos.
+// Retorna verdadero si sus áreas se intersectan.
 int hayColision(int x1, int y1, int w1, int h1,
                 int x2, int y2, int w2, int h2) {
     return (x1 < x2 + w2) &&
@@ -1000,6 +1036,8 @@ int hayColision(int x1, int y1, int w1, int h1,
            (y1 + h1 > y2);
 }
 
+// Prepara el estado de muerte de Mario en la lógica antigua/global.
+// Detiene salto, inercia y cambia el sprite a la animación de muerte.
 void iniciarMuerteMario(void) {
     jumpState = 0;
     jumpProgress = 0;
@@ -1010,6 +1048,8 @@ void iniciarMuerteMario(void) {
     mario_actual = mario_muere;
     mario_ancho_hoja = 80;   // 5 frames x 16 px
 }
+// Reinicia todos los estados principales del juego.
+// Limpia enemigos, reposiciona personajes, resetea menú, entradas, victoria y vuelve a portada.
 void reiniciarJuego(void) {
     // Limpiar barriles activos
     for (int i = 0; i < MAX_BARRILES; i++) {
@@ -1099,12 +1139,16 @@ void reiniciarJuego(void) {
     cambioDePantalla = 1;
 }
 
+// Corrige el orden de bytes de los colores leídos desde archivos BIN.
+// Esto asegura que los colores se muestren correctamente en la LCD.
 void FixColorEndianness(uint16_t *buffer, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         buffer[i] = (buffer[i] << 8) | (buffer[i] >> 8);
     }
 }
 
+// Dibuja una imagen BIN desde la tarjeta SD directamente en la pantalla.
+// Lee fila por fila, corrige el color y alterna el chip select entre SD y LCD.
 void Dibujar_Imagen_Bin(char* nombre, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
     FIL fil;
     UINT bytesRead;
@@ -1145,6 +1189,8 @@ void Dibujar_Imagen_Bin(char* nombre, uint16_t x, uint16_t y, uint16_t w, uint16
     }
 }
 
+// Dibuja un tile de 8x8 en pantalla si la posición y el puntero son válidos.
+// Evita dibujar fuera de los límites del display.
 static inline void DibujarTile8(int x, int y, const uint16_t *tile)
 {
     if (tile == NULL) return;
@@ -1152,6 +1198,8 @@ static inline void DibujarTile8(int x, int y, const uint16_t *tile)
     LCD_Bitmap(x, y, TILE_W, TILE_H, (uint16_t *)tile);
 }
 
+// Revisa si dos rectángulos se cruzan.
+// Se usa para decidir si hay que redibujar decoración fija al restaurar fondos.
 int RectIntersects(int x1, int y1, int w1, int h1,
                    int x2, int y2, int w2, int h2)
 {
@@ -1161,6 +1209,8 @@ int RectIntersects(int x1, int y1, int w1, int h1,
            (y1 + h1 > y2);
 }
 
+// Dibuja los elementos fijos del nivel 1 que no pertenecen directamente al tilemap.
+// Incluye barriles apilados y el oil.
 void DibujarDecoracionNivel1(void)
 {
     // Reemplaza barriles_stack por el nombre real de tu sprite de barriles apilados
@@ -1169,6 +1219,8 @@ void DibujarDecoracionNivel1(void)
     LCD_Bitmap(34, 198, 20, 24, (uint16_t *)oil);
 }
 
+// Dibuja el mapa completo del nivel 1 usando tiles.
+// Primero limpia la pantalla y luego coloca cada tile distinto al fondo.
 void DibujarNivel1Tileado(void)
 {
     LCD_Clear(0x0000);
@@ -1185,6 +1237,8 @@ void DibujarNivel1Tileado(void)
     DibujarDecoracionNivel1();
 }
 
+// Restaura una zona rectangular del nivel 1.
+// Redibuja los tiles afectados y vuelve a colocar decoración fija si el área restaurada la toca.
 void RestaurarRectNivel1(int rx, int ry, int rw, int rh)
 {
     FillRect(rx, ry, rw, rh, 0x0000);
@@ -1218,11 +1272,14 @@ void RestaurarRectNivel1(int rx, int ry, int rw, int rh)
     }
 }
 
+// Dibuja la decoración fija del nivel 2.
+// Actualmente coloca el oil en su posición del mapa.
 void DibujarDecoracionNivel2(void)
 {
     LCD_Bitmap(152, 95, 20, 24, (uint16_t *)oil);
 }
 
+// Dibuja el mapa completo del nivel 2 usando su tilemap y tileset correspondiente.
 void DibujarNivel2Tileado(void)
 {
     LCD_Clear(0x0000);
@@ -1239,6 +1296,8 @@ void DibujarNivel2Tileado(void)
     DibujarDecoracionNivel2();
 }
 
+// Restaura una zona rectangular del nivel 2.
+// Redibuja tiles afectados y vuelve a colocar el oil si corresponde.
 void RestaurarRectNivel2(int rx, int ry, int rw, int rh)
 {
     FillRect(rx, ry, rw, rh, 0x0000);
@@ -1267,6 +1326,8 @@ void RestaurarRectNivel2(int rx, int ry, int rw, int rh)
     }
 }
 
+// Inicializa los fuegos del nivel 2.
+// Limpia estados previos y asigna a cada fuego su ruta, posición inicial y variables de animación.
 void InicializarFuegosNivel2(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         fuegos[i].activo = 0;
@@ -1300,6 +1361,8 @@ void InicializarFuegosNivel2(void) {
     fuegos[2].y_ant = fuegos[2].y;
 }
 
+// Actualiza el movimiento de los fuegos del nivel 2.
+// Cada fuego avanza por segmentos con interpolación horizontal y arco parabólico vertical.
 void ActualizarFuegosNivel2(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1336,6 +1399,8 @@ void ActualizarFuegosNivel2(void) {
     }
 }
 
+// Dibuja los fuegos del nivel 2.
+// Primero restaura el fondo anterior y luego dibuja el sprite transparente en la nueva posición.
 void DibujarFuegosNivel2(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1355,6 +1420,8 @@ void DibujarFuegosNivel2(void) {
     }
 }
 
+// Ajusta al personaje sobre plataformas del nivel 2.
+// Retorna 1 si logró apoyarlo sobre una plataforma y 0 si debe seguir cayendo.
 int actualizarY_Personaje_N2(Personaje *p)
 {
     int viga_encontrada = -1;
@@ -1383,6 +1450,8 @@ int actualizarY_Personaje_N2(Personaje *p)
     return 0;
 }
 
+// Procesa movimiento del personaje en el nivel 2.
+// Maneja salto, gravedad básica, escaleras, aterrizaje en plataformas y límites de pantalla.
 void ProcesarMovimientoNivel2(Personaje *p)
 {
     if (p->muriendo) return;
@@ -1489,6 +1558,8 @@ void ProcesarMovimientoNivel2(Personaje *p)
     if (p->y > 240 - 16) p->y = 240 - 16;
 }
 
+// Revisa si el personaje colisiona con algún fuego del nivel 2.
+// Si hay contacto, activa el estado de muerte y cambia el sprite.
 void ColisionPersonajeFuegosNivel2(Personaje *p)
 {
     if (p->muriendo) return;
@@ -1508,11 +1579,14 @@ void ColisionPersonajeFuegosNivel2(Personaje *p)
     }
 }
 
+// Espacio reservado para dibujar decoración fija del nivel 3.
+// Aquí pueden agregarse elementos como oil, princesa u otros sprites estáticos.
 void DibujarDecoracionNivel3(void)
 {
     // si quieres oil, princesa, etc., lo pones aquí
 }
 
+// Dibuja el mapa completo del nivel 3 usando su tilemap y tileset.
 void DibujarNivel3Tileado(void)
 {
     LCD_Clear(0x0000);
@@ -1529,6 +1603,8 @@ void DibujarNivel3Tileado(void)
     DibujarDecoracionNivel3();
 }
 
+// Restaura una zona rectangular del nivel 3.
+// Redibuja los tiles afectados y luego vuelve a colocar la decoración fija del nivel.
 void RestaurarRectNivel3(int rx, int ry, int rw, int rh)
 {
     FillRect(rx, ry, rw, rh, 0x0000);
@@ -1555,6 +1631,8 @@ void RestaurarRectNivel3(int rx, int ry, int rw, int rh)
     DibujarDecoracionNivel3();
 }
 
+// Dibuja los fuegos del nivel 3 restaurando primero su posición anterior.
+// Usa transparencia para evitar cubrir el fondo del tilemap.
 void DibujarFuegosNivel3(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1574,6 +1652,8 @@ void DibujarFuegosNivel3(void) {
     }
 }
 
+// Actualiza las rutas y animaciones de los fuegos del nivel 3.
+// Reutiliza la lógica de salto por tramos con arco parabólico.
 void ActualizarFuegosNivel3(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1606,6 +1686,8 @@ void ActualizarFuegosNivel3(void) {
     }
 }
 
+// Inicializa los fuegos del nivel 3.
+// Asigna las rutas específicas del nivel y reinicia posiciones anteriores.
 void InicializarFuegosNivel3(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         fuegos[i].activo = 0;
@@ -1639,6 +1721,8 @@ void InicializarFuegosNivel3(void) {
     fuegos[2].y_ant = fuegos[2].y;
 }
 
+// Ajusta al personaje sobre plataformas del nivel 3.
+// Tiene un margen especial para permitir aterrizajes sobre plataformas durante el salto.
 int actualizarY_Personaje_N3(Personaje *p)
 {
     int viga_encontrada = -1;
@@ -1667,6 +1751,8 @@ int actualizarY_Personaje_N3(Personaje *p)
     return 0;
 }
 
+// Detecta colisiones entre el personaje y los fuegos del nivel 3.
+// Al colisionar, activa la animación de muerte del jugador correspondiente.
 void ColisionPersonajeFuegosNivel3(Personaje *p)
 {
     if (p->muriendo) return;
@@ -1686,6 +1772,8 @@ void ColisionPersonajeFuegosNivel3(Personaje *p)
     }
 }
 
+// Procesa movimiento del personaje en el nivel 3.
+// Incluye escaleras, caída, salto con aterrizaje en plataformas y límites de pantalla.
 void ProcesarMovimientoNivel3(Personaje *p)
 {
     if (p->muriendo) return;
@@ -1816,6 +1904,7 @@ void ProcesarMovimientoNivel3(Personaje *p)
     if (p->y > 240 - 16) p->y = 240 - 16;
 }
 
+// Dibuja el mapa completo del nivel 4 usando su tilemap y tileset.
 void DibujarNivel4Tileado(void) {
     LCD_Clear(0x0000);
     for (int fila = 0; fila < MAP_H; fila++) {
@@ -1828,6 +1917,8 @@ void DibujarNivel4Tileado(void) {
     }
 }
 
+// Restaura una zona rectangular del nivel 4.
+// Redibuja únicamente los tiles afectados para ahorrar tiempo de dibujo.
 void RestaurarRectNivel4(int rx, int ry, int rw, int rh) {
     FillRect(rx, ry, rw, rh, 0x0000);
     int col_ini = rx / TILE_W, col_fin = (rx + rw - 1) / TILE_W;
@@ -1841,6 +1932,8 @@ void RestaurarRectNivel4(int rx, int ry, int rw, int rh) {
     }
 }
 
+// Inicializa los fuegos del nivel 4.
+// Limpia estados y asigna las rutas específicas para cada enemigo.
 void InicializarFuegosNivel4(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         fuegos[i].activo = 0;
@@ -1874,6 +1967,8 @@ void InicializarFuegosNivel4(void) {
     fuegos[2].y_ant = fuegos[2].y;
 }
 
+// Actualiza el movimiento de los fuegos del nivel 4.
+// Usa interpolación horizontal y arco vertical para simular saltos.
 void ActualizarFuegosNivel4(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1910,6 +2005,7 @@ void ActualizarFuegosNivel4(void) {
     }
 }
 
+// Dibuja los fuegos del nivel 4 restaurando el fondo anterior antes de pintar el nuevo sprite.
 void DibujarFuegosNivel4(void) {
     for (int i = 0; i < MAX_FUEGOS; i++) {
         if (!fuegos[i].activo) continue;
@@ -1929,6 +2025,8 @@ void DibujarFuegosNivel4(void) {
     }
 }
 
+// Ajusta al personaje sobre plataformas del nivel 4.
+// Solo acepta plataformas al mismo nivel o debajo del personaje para evitar pegados incorrectos.
 int actualizarY_Personaje_N4(Personaje *p)
 {
     int viga_encontrada = -1;
@@ -1960,6 +2058,8 @@ int actualizarY_Personaje_N4(Personaje *p)
     return 0;
 }
 
+// Procesa movimiento del personaje en el nivel 4.
+// Controla escaleras con ancho variable, caída, salto y límites de pantalla.
 void ProcesarMovimientoNivel4(Personaje *p)
 {
     if (p->muriendo) return;
@@ -2088,6 +2188,8 @@ void ProcesarMovimientoNivel4(Personaje *p)
     if (p->y > 240 - 16) p->y = 240 - 16;
 }
 
+// Revisa colisiones entre personaje y fuegos del nivel 4.
+// Si hay contacto, activa estado de muerte y sprite correspondiente.
 void ColisionPersonajeFuegosNivel4(Personaje *p)
 {
     if (p->muriendo) return;
@@ -2107,6 +2209,8 @@ void ColisionPersonajeFuegosNivel4(Personaje *p)
     }
 }
 
+// Dibuja el selector visual del menú según la pantalla actual.
+// En menú 1 selecciona jugadores; en menú 2 selecciona nivel.
 void DibujarSelectorMenu(void) {
     if (menu == 1) {
         if (jugadores == 1) {
@@ -2133,6 +2237,8 @@ void DibujarSelectorMenu(void) {
     }
 }
 
+// Borra el selector visual anterior del menú.
+// Limpia únicamente la zona donde estaba para evitar redibujar toda la pantalla.
 void BorrarSelectorMenu(void) {
     if (menu == 1) {
         if (jugadores == 1) {
@@ -2159,6 +2265,8 @@ void BorrarSelectorMenu(void) {
     }
 }
 
+// Confirma la selección actual del menú.
+// Cambia de selección de jugadores a selección de nivel o inicia el nivel elegido.
 void ConfirmarSeleccionMenu(void) {
     if (menu == 1) {
         menu = 2; menu_print = 1; select = 0; nivel = 1;
@@ -2195,6 +2303,8 @@ void ConfirmarSeleccionMenu(void) {
     }
 }
 
+// Controla la pantalla global de victoria.
+// Envía el comando por UART3, muestra la imagen ganaste.bin y vuelve al menú al terminar el tiempo.
 void victoria(void) {
     if (!victoria_pintada) {
     	HAL_UART_Transmit(&huart3, (uint8_t*)"V", 1, 1000);
@@ -2212,6 +2322,8 @@ void victoria(void) {
     }
 }
 
+// Verifica si un personaje está parado sobre la plataforma de victoria indicada.
+// Se usa como condición para activar victoria por posición.
 int marioEnPlataformaVictoria_P(Personaje *p, int idx) {
     int checkX = p->x + 8;
     return (p->jumpState == 0 &&
@@ -2220,6 +2332,8 @@ int marioEnPlataformaVictoria_P(Personaje *p, int idx) {
             p->y == alturaPlataformaEnX(idx, checkX));
 }
 
+// Envía una cadena de texto por UART2.
+// Se usa para mensajes de depuración hacia la terminal.
 void transmit_uart(char *string)
 {
 	uint8_t len = strlen(string);
@@ -2265,6 +2379,7 @@ int main(void)
   MX_FATFS_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+  // Se inicia la pantalla LCD y se limpia (color negro)
   LCD_Init();
   LCD_Clear(0x0000);
 
@@ -2272,7 +2387,8 @@ int main(void)
   HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, GPIO_PIN_SET); // LCD OFF
   HAL_Delay(20);
 
-  fres = f_mount(&fs, "", 1); // Ahora CMD0 debería funcionar
+  // Montamos la SD, asegurándonos de forzar el montaje para evitar leer al vacío
+  fres = f_mount(&fs, "", 1);
 
   if (fres == FR_OK) {
       transmit_uart("SD Montada!\r\n");
@@ -2280,6 +2396,7 @@ int main(void)
       sprintf(buffer, "f_mount error = %d\r\n", fres);
       transmit_uart(buffer);
   }
+
 	// Inicio de UARTs
 	HAL_UART_Receive_IT(&huart1, &rx_data1, 1);
 	HAL_UART_Receive_IT(&huart2, &rx_data2, 1);
@@ -2288,1382 +2405,1414 @@ int main(void)
 
 	//LCD_Bitmap(0, 31, 320, 209, fondo);
 
+	// Obtenemos un número aleatorio utilizando el tiempo de encendido del programa
 	srand(HAL_GetTick());
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
-
-		if (!victoria_activa && !p1.muriendo && (jugadores == 1 || !p2.muriendo)) {
-		    // =====================================================
-		    // 1. LÓGICA JUGADOR 1 (Control 1 - UART1)
-		    // =====================================================
-		    if (ctrl_state1 != prev_state1) {
-		        uint8_t changed = ctrl_state1 ^ prev_state1;
-
-		        if (estadoActual == ESTADO_PORTADA) {
-		            if ((changed & BTN_UP) && (ctrl_state1 & BTN_UP)) menu_up = 1;
-		            if ((changed & BTN_DOWN) && (ctrl_state1 & BTN_DOWN)) menu_down = 1;
-		            if ((changed & BTN_SQUARE) && (ctrl_state1 & BTN_SQUARE)) select = 1;
-		        } else {
-		            // Salto P1
-		            if ((changed & BTN_X) && (ctrl_state1 & BTN_X)) {
-		                if (p1.jumpState == 0) {
-		                    p1.jumpState = 1;
-		                    p1.jumpProgress = 0;
-		                    p1.y_past = p1.y;
-		                    p1.actual_bmp = mario_brinca;
-		                    p1.ancho_hoja = 16;
-		                }
-		            }
-		        }
-		        prev_state1 = ctrl_state1;
-		    }
-
-		    // Lógica continua P1 (Caminar / Escalar)
-		    if (estadoActual != ESTADO_PORTADA) {
-		        if (p1.jumpState == 0) {
-		            if (ctrl_state1 & BTN_RIGHT) {
-		                p1.x += 3; p1.flip = 1; p1.inercia_x = 2;
-		                p1.actual_bmp = mario_camina; p1.ancho_hoja = 48;
-		            } else if (ctrl_state1 & BTN_LEFT) {
-		                p1.x -= 3; p1.flip = 0; p1.inercia_x = -2;
-		                p1.actual_bmp = mario_camina; p1.ancho_hoja = 48;
-		            } else { p1.inercia_x = 0; }
-
-		            if (ctrl_state1 & BTN_UP) p1.sube = 1;
-		            else if (ctrl_state1 & BTN_DOWN) p1.sube = 2;
-		            else p1.sube = 0;
-		        }
-		    }
-
-		    // =====================================================
-		    // 2. LÓGICA JUGADOR 2 (Control 2 - UART6)
-		    // =====================================================
-		    if (jugadores == 2) {
-		        if (ctrl_state6 != prev_state2) {
-		            uint8_t changed = ctrl_state6 ^ prev_state2;
-
-		            // Salto P2
-		            if ((changed & BTN_X) && (ctrl_state6 & BTN_X)) {
-		                if (p2.jumpState == 0) {
-		                    p2.jumpState = 1;
-		                    p2.jumpProgress = 0;
-		                    p2.y_past = p2.y;
-		                    p2.actual_bmp = luigi_brinca; // Usar sprite de Luigi
-		                    p2.ancho_hoja = 16;
-		                }
-		            }
-		            prev_state2 = ctrl_state6;
-		        }
-
-		        // Lógica continua P2
-		        if (estadoActual != ESTADO_PORTADA) {
-		            if (p2.jumpState == 0) {
-		                if (ctrl_state6 & BTN_RIGHT) {
-		                    p2.x += 3; p2.flip = 1; p2.inercia_x = 2;
-		                    p2.actual_bmp = luigi_camina; p2.ancho_hoja = 48;
-		                } else if (ctrl_state6 & BTN_LEFT) {
-		                    p2.x -= 3; p2.flip = 0; p2.inercia_x = -2;
-		                    p2.actual_bmp = luigi_camina; p2.ancho_hoja = 48;
-		                } else { p2.inercia_x = 0; }
-
-		                if (ctrl_state6 & BTN_UP) p2.sube = 1;
-		                else if (ctrl_state6 & BTN_DOWN) p2.sube = 2;
-		                else p2.sube = 0;
-		            }
-		        }
-		    }
-
-		    // =====================================================
-		    // 3. LÓGICA TERMINAL (Debug / Comando UART2)
-		    // =====================================================
-		    if (ctrl_cmd2 != 0) {
-		        comando = ctrl_cmd2; ctrl_cmd2 = 0;
-		        // Aplicar comandos de terminal solo a P1 para debug
-		        if (estadoActual == ESTADO_PORTADA) {
-		            if (comando == 'u') menu_up = 1;
-		            if (comando == 'd') menu_down = 1;
-		            if (comando == 's') select = 1;
-		        } else {
-		            if (comando == 'j' && p1.jumpState == 0) {
-		                p1.jumpState = 1; p1.y_past = p1.y;
-		                p1.actual_bmp = mario_brinca; p1.ancho_hoja = 16;
-		            }
-		            if (comando == 'r') { p1.x += 5; p1.flip = 1; p1.inercia_x = 2; }
-		            if (comando == 'l') { p1.x -= 5; p1.flip = 0; p1.inercia_x = -2; }
-		        }
-		    }
-		}
-		if (victoria_activa) {
-		    victoria();
-		    HAL_Delay(10);
-		    continue;
-		}
-		            // --- DIBUJAR SEGÚN EL ESTADO ---
-		            switch (estadoActual) {
-// === Menu ============================================================================================
-		            case ESTADO_PORTADA:
-		                switch (menu) {
-		                    case 1: // Menú selector de jugadores
-		                        if (menu_print == 1) {
-		                            LCD_Clear(0x0000);
-		                            Dibujar_Imagen_Bin("pantalla_de_inicio_f.bin", 0, 0, 320, 240);
-		                            DibujarSelectorMenu();
-		                            menu_print = 0;
-		                            cambioDePantalla = 0;
-		                            HAL_UART_Transmit(&huart3, (uint8_t*)"M", 1, 1000);
-		                            //HAL_UART_Transmit(&huart2, (uint8_t*)"M", 1, 1000);
-		                        }
-
-		                        if (menu_up == 1) {
-		                            BorrarSelectorMenu();
-
-		                            if (jugadores == 1) jugadores = 2;
-		                            else jugadores = 1;
-
-		                            DibujarSelectorMenu();
-		                            menu_up = 0;
-		                        }
-		                        else if (menu_down == 1) {
-		                            BorrarSelectorMenu();
-
-		                            if (jugadores == 1) jugadores = 2;
-		                            else jugadores = 1;
-
-		                            DibujarSelectorMenu();
-		                            menu_down = 0;
-		                        }
-
-		                        if (select == 1) {
-		                            ConfirmarSeleccionMenu();
-		                        }
-		                        break;
-
-		                    case 2: // Menú selector de nivel
-		                        if (menu_print == 1) {
-		                            LCD_Clear(0x0000);
-		                            Dibujar_Imagen_Bin("pantalla_de_inicio_l.bin", 0, 0, 320, 240);
-		                            DibujarSelectorMenu();
-		                            menu_print = 0;
-		                            cambioDePantalla = 0;
-		                        }
-
-		                        if (menu_up == 1) {
-		                            BorrarSelectorMenu();
-
-		                            if (nivel == 1) nivel = 4;
-		                            else nivel--;
-
-		                            DibujarSelectorMenu();
-		                            menu_up = 0;
-		                        }
-		                        else if (menu_down == 1) {
-		                            BorrarSelectorMenu();
-
-		                            if (nivel == 4) nivel = 1;
-		                            else nivel++;
-
-		                            DibujarSelectorMenu();
-		                            menu_down = 0;
-		                        }
-
-		                        if (select == 1) {
-		                            ConfirmarSeleccionMenu();
-		                        }
-		                        break;
-		                }
-		                break;
-
-// === NIVEL 1 ===================================================================================
-		                case ESTADO_NIVEL_1:
-		                    if (cambioDePantalla) {
-		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"1", 1, 1000);
-
-		                        LCD_Clear(0x0000);
-
-		                        plataformas_actuales = nivel1;
-		                        numPlataformas_actual = 7;
-		                        escaleras_actuales = nivel1_escaleras;
-		                        numEscaleras_actual = 8;
-
-		                        DibujarNivel1Tileado();
-
-		                        cambioDePantalla = 0;
-		                        frame_counter = 0;
-		                        spawn_timer = 0;
-		                        dk_lanzando = 0;
-		                        dk_anim = 0;
-		                        dk_anim_tick = 0;
-		                        dk_barril_pendiente = 0;
-		                        dk_spawns_pendientes = 0;
-		                        dk_anim_prev = -1;
-		                        princess_anim_prev = -1;
-
-		                        for (int i = 0; i < MAX_BARRILES; i++) {
-		                            barriles[i].activo = 0;
-		                            barriles[i].x = 0;
-		                            barriles[i].y = 0;
-		                            barriles[i].x_ant = 0;
-		                            barriles[i].y_ant = 0;
-		                            barriles[i].anim = 0;
-		                            barriles[i].estado = BARRIL_RODANDO;
-		                            barriles[i].plataforma_actual = -1;
-		                            barriles[i].plataforma_destino = -1;
-		                            barriles[i].escalera_objetivo = -1;
-		                            barriles[i].dir = 1;
-		                        }
-
-		                        // Inicializar P1
-		                        p1.x = 15;
-		                        p1.y = 219;
-		                        p1.x_ant = p1.x;
-		                        p1.y_ant = p1.y;
-		                        p1.flip = 0;
-		                        p1.y_past = p1.y;
-		                        p1.jumpState = 0;
-		                        p1.jumpProgress = 0;
-		                        p1.inercia_x = 0;
-		                        p1.sube = 0;
-		                        p1.muriendo = 0;
-		                        p1.frame = 0;
-		                        p1.tick = 0;
-		                        p1.actual_bmp = mario_camina;
-		                        p1.ancho_hoja = 48;
-		                        p1.color_transparente = 0x0000;
-		                        p1.frame_ant = 255;   // fuerza primer dibujo
-
-		                        // Inicializar P2
-		                        p2.muriendo = 0;
-		                        p2.frame = 0;
-		                        p2.tick = 0;
-		                        p2.frame_ant = 255;
-		                        p2.jumpState = 0;
-		                        p2.jumpProgress = 0;
-		                        p2.inercia_x = 0;
-		                        p2.sube = 0;
-		                        p2.flip = 0;
-		                        p2.color_transparente = 0x0000;
-
-		                        if (jugadores == 2) {
-		                            p2.x = 40;
-		                            p2.y = 219;
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.y_past = p2.y;
-		                            p2.actual_bmp = luigi_camina;
-		                            p2.ancho_hoja = 48;
-		                        }
-		                    }
-
-		                    // --- 1. LÓGICA DE DONKEY KONG (Spawn de barriles) ---
-		                    spawn_timer++;
-		                    if (!dk_lanzando) {
-		                        int activos = 0;
-		                        for (int i = 0; i < MAX_BARRILES; i++) {
-		                            if (barriles[i].activo) activos++;
-		                        }
-
-		                        if ((dk_spawns_pendientes > 0 || spawn_timer > 150) &&
-		                            activos < MaxBarrilesActivosNivel1()) {
-
-		                            dk_lanzando = 1;
-		                            dk_anim = 0;
-		                            dk_anim_tick = 0;
-		                            dk_barril_pendiente = 1;
-
-		                            if (dk_spawns_pendientes > 0) dk_spawns_pendientes--;
-		                            spawn_timer = 0;
-		                        }
-		                    }
-
-		                    if (dk_lanzando) {
-		                        dk_anim_tick++;
-		                        if (dk_anim_tick >= 6) {
-		                            dk_anim_tick = 0;
-		                            dk_anim++;
-
-		                            if (dk_anim == 2 && dk_barril_pendiente) {
-		                                crearBarril();
-		                                dk_barril_pendiente = 0;
-		                            }
-
-		                            if (dk_anim > 2) {
-		                                dk_anim = 0;
-		                                dk_lanzando = 0;
-		                            }
-		                        }
-		                    }
-
-		                    // --- 2. ACTUALIZAR OBJETOS Y JUGADORES ---
-		                    actualizarBarriles();
-		                    ProcesarMovimientoNivel1(&p1);
-		                    if (jugadores == 2) ProcesarMovimientoNivel1(&p2);
-
-		                    // --- 3. DETECTAR COLISIONES (Barriles contra P1 y P2) ---
-		                    for (int i = 0; i < MAX_BARRILES; i++) {
-		                        if (!barriles[i].activo) continue;
-
-		                        if (!p1.muriendo &&
-		                            hayColision(p1.x, p1.y, 16, 16, barriles[i].x + 3, barriles[i].y + 2, 8, 8)) {
-		                            p1.muriendo = 1;
-		                            p1.frame = 0;
-		                            p1.tick = 0;
-		                        }
-
-		                        if (jugadores == 2 && !p2.muriendo &&
-		                            hayColision(p2.x, p2.y, 16, 16, barriles[i].x + 3, barriles[i].y + 2, 8, 8)) {
-		                            p2.muriendo = 1;
-		                            p2.frame = 0;
-		                            p2.tick = 0;
-		                        }
-		                    }
-
-		                    // --- 4. GESTIÓN DE MUERTE (Animación) ---
-		                    if (p1.muriendo) {
-		                        p1.tick++;
-		                        if (p1.tick >= 6) {
-		                            p1.tick = 0;
-		                            p1.frame++;
-		                            if (p1.frame >= 5) {
-		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
-		                                reiniciarJuego();
-		                                break;
-		                            }
-		                        }
-		                        p1.actual_bmp = mario_muere;
-		                        p1.ancho_hoja = 80;
-		                    }
-
-		                    if (jugadores == 2 && p2.muriendo) {
-		                        p2.tick++;
-		                        if (p2.tick >= 6) {
-		                            p2.tick = 0;
-		                            p2.frame++;
-		                            if (p2.frame >= 5) {
-		                                p2.muriendo = 0;   // o aquí luego manejas vidas
-		                                p2.frame = 0;
-		                                p2.tick = 0;
-		                                p2.actual_bmp = luigi_camina;
-		                                p2.ancho_hoja = 48;
-		                            }
-		                        }
-		                        if (p2.muriendo) {
-		                            p2.actual_bmp = luigi_muere;
-		                            p2.ancho_hoja = 80;
-		                        }
-		                    }
-
-		                    // --- 5. PREPARAR FRAMES ACTUALES ---
-		                    frame_counter++;
-
-		                    int princess_anim = (frame_counter / 15) % 2;
-
-		                    int f1 = p1.muriendo ? p1.frame :
-		                             (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
-
-		                    int f2 = 0;
-		                    if (jugadores == 2) {
-		                        f2 = p2.muriendo ? p2.frame :
-		                             (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
-		                    }
-
-		                    int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
-		                    int redraw_p2 = (jugadores == 2) &&
-		                                    (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
-
-		                    if (!p1.muriendo && !victoria_activa) {
-		                        if (marioEnPlataformaVictoria_P(&p1, 0)) {
-		                            victoria_activa = 1;
-		                            break;
-		                        }
-		                    }
-
-		                    if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
-		                        if (marioEnPlataformaVictoria_P(&p2, 0)) {
-		                            victoria_activa = 1;
-		                            break;
-		                        }
-		                    }
-
-		                    // --- 6. RESTAURAR TODO LO VIEJO PRIMERO ---
-
-		                    // A. DK
-		                    if (dk_anim != dk_anim_prev) {
-		                        RestaurarRectNivel1(35, 39, 32, 32);
-		                    }
-
-		                    // B. Princesa
-		                    if (princess_anim != princess_anim_prev) {
-		                        RestaurarRectNivel1(127, 24, 44, 22);
-		                    }
-
-		                    // C. Barriles
-		                    for (int i = 0; i < MAX_BARRILES; i++) {
-		                        if (barriles[i].activo) {
-		                            RestaurarFondoBarrilSeguro(barriles[i].x_ant, barriles[i].y_ant);
-		                        }
-		                    }
-
-		                    // D. Jugadores
-		                    if (redraw_p1) {
-		                        RestaurarRectNivel1(p1.x_ant, p1.y_ant, 16, 16);
-		                    }
-
-		                    if (redraw_p2) {
-		                        RestaurarRectNivel1(p2.x_ant, p2.y_ant, 16, 16);
-		                    }
-
-		                    // --- 7. DIBUJAR TODO LO NUEVO DESPUÉS ---
-
-		                    // A. Donkey Kong
-		                    if (dk_anim != dk_anim_prev) {
-		                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                        LCD_DibujarSpriteTransparente(
-		                            35, 39,
-		                            32, 32,
-		                            donkey_barril,
-		                            dk_anim,
-		                            96,
-		                            0x0000,
-		                            0
-		                        );
-		                    }
-
-		                    // B. Princesa
-		                    if (princess_anim != princess_anim_prev) {
-		                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                        LCD_DibujarSpriteTransparente(
-		                            127, 24,
-		                            44, 22,
-		                            princesa,
-		                            princess_anim,
-		                            88,
-		                            0x0000,
-		                            0
-		                        );
-		                    }
-
-		                    // C. Barriles
-		                    for (int i = 0; i < MAX_BARRILES; i++) {
-		                        if (!barriles[i].activo) continue;
-
-		                        const uint16_t *sprite_b =
-		                            (barriles[i].estado == BARRIL_BAJANDO_ESC) ? barril_frontal : barril_lateral;
-		                        int hoja_b =
-		                            (barriles[i].estado == BARRIL_BAJANDO_ESC) ? 32 : 64;
-
-		                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                        LCD_DibujarSpriteTransparente(
-		                            barriles[i].x, barriles[i].y,
-		                            16, 16,
-		                            sprite_b,
-		                            barriles[i].anim % (hoja_b / 16),
-		                            hoja_b,
-		                            0x0000,
-		                            0
-		                        );
-		                    }
-
-		                    // D. P1
-		                    if (redraw_p1) {
-		                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                        LCD_DibujarSpriteTransparente(
-		                            p1.x, p1.y,
-		                            16, 16,
-		                            p1.actual_bmp,
-		                            f1,
-		                            p1.ancho_hoja,
-		                            0x0000,
-		                            p1.flip
-		                        );
-		                    }
-
-		                    // E. P2
-		                    if (redraw_p2) {
-		                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                        LCD_DibujarSpriteTransparente(
-		                            p2.x, p2.y,
-		                            16, 16,
-		                            p2.actual_bmp,
-		                            f2,
-		                            p2.ancho_hoja,
-		                            0x0000,
-		                            p2.flip
-		                        );
-		                    }
-
-		                    // --- 8. COMMIT DE ESTADOS NUEVOS ---
-		                    if (dk_anim != dk_anim_prev) {
-		                        dk_anim_prev = dk_anim;
-		                    }
-
-		                    if (princess_anim != princess_anim_prev) {
-		                        princess_anim_prev = princess_anim;
-		                    }
-
-		                    for (int i = 0; i < MAX_BARRILES; i++) {
-		                        if (barriles[i].activo) {
-		                            barriles[i].x_ant = barriles[i].x;
-		                            barriles[i].y_ant = barriles[i].y;
-		                        }
-		                    }
-
-		                    if (redraw_p1) {
-		                        p1.x_ant = p1.x;
-		                        p1.y_ant = p1.y;
-		                        p1.frame_ant = f1;
-		                    }
-
-		                    if (redraw_p2) {
-		                        p2.x_ant = p2.x;
-		                        p2.y_ant = p2.y;
-		                        p2.frame_ant = f2;
-		                    }
-
-		                    break;
-
-// === Nivel 2 ========================================================================================
-		                case ESTADO_NIVEL_2:
-		                    if (cambioDePantalla) {
-		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"2", 1, 1000);
-
-		                        DibujarNivel2Tileado();
-
-		                        plataformas_actuales = nivel2;
-		                        numPlataformas_actual = 8;
-		                        escaleras_actuales = nivel2_escaleras;
-		                        numEscaleras_actual = 12;
-
-		                        // ---------- P1 ----------
-		                        p1.x = LVL2_MARIO_START_X;
-		                        p1.y = alturaPlataformaEnX(7, p1.x + 8);
-		                        p1.x_ant = p1.x;
-		                        p1.y_ant = p1.y;
-		                        p1.y_past = p1.y;
-		                        p1.flip = 0;
-		                        p1.actual_bmp = mario_camina;
-		                        p1.ancho_hoja = 48;
-		                        p1.jumpState = 0;
-		                        p1.jumpProgress = 0;
-		                        p1.inercia_x = 0;
-		                        p1.sube = 0;
-		                        p1.muriendo = 0;
-		                        p1.frame = 0;
-		                        p1.tick = 0;
-		                        p1.frame_ant = 255;
-		                        p1.color_transparente = 0x0000;
-
-		                        // ---------- P2 ----------
-		                        p2.muriendo = 0;
-		                        p2.frame = 0;
-		                        p2.tick = 0;
-		                        p2.frame_ant = 255;
-		                        p2.jumpState = 0;
-		                        p2.jumpProgress = 0;
-		                        p2.inercia_x = 0;
-		                        p2.sube = 0;
-		                        p2.flip = 0;
-		                        p2.color_transparente = 0x0000;
-
-		                        if (jugadores == 2) {
-		                            p2.x = LVL2_MARIO_START_X + 24;
-		                            p2.y = alturaPlataformaEnX(7, p2.x + 8);
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.y_past = p2.y;
-		                            p2.actual_bmp = luigi_camina;
-		                            p2.ancho_hoja = 48;
-		                        }
-
-		                        dk_anim_prev = -1;
-		                        princess_anim_prev = -1;
-		                        frame_counter = 0;
-
-		                        InicializarFuegosNivel2();
-		                        fuego_tick = HAL_GetTick();
-
-		                        cambioDePantalla = 0;
-		                    }
-
-		                    // ---------- DK bailando ----------
-		                    {
-		                        int dk2_anim = (frame_counter / 10) % 4;
-
-		                        if (dk2_anim != dk_anim_prev) {
-		                            RestaurarRectNivel2(LVL2_DK_X, LVL2_DK_Y, 32, 32);
-
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                LVL2_DK_X, LVL2_DK_Y,
-		                                32, 32,
-		                                dkong_dance,
-		                                dk2_anim,
-		                                128,
-		                                0x0000,
-		                                0
-		                            );
-
-		                            dk_anim_prev = dk2_anim;
-		                        }
-		                    }
-
-		                    // ---------- Princesa ----------
-		                    {
-		                        int princess_anim2 = (frame_counter / 15) % 2;
-
-		                        if (princess_anim2 != princess_anim_prev) {
-		                            RestaurarRectNivel2(LVL2_PRINCESS_X, LVL2_PRINCESS_Y, 44, 22);
-
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                LVL2_PRINCESS_X, LVL2_PRINCESS_Y,
-		                                44, 22,
-		                                princesa,
-		                                princess_anim2,
-		                                88,
-		                                0x0000,
-		                                0
-		                            );
-
-		                            princess_anim_prev = princess_anim2;
-		                        }
-		                    }
-
-		                    frame_counter++;
-
-		                    // ---------- Fuegos ----------
-		                    if (HAL_GetTick() - fuego_tick >= 90) {
-		                        fuego_tick = HAL_GetTick();
-		                        ActualizarFuegosNivel2();
-		                        DibujarFuegosNivel2();
-		                    }
-
-		                    // ---------- Colisiones con fuegos ----------
-		                    ColisionPersonajeFuegosNivel2(&p1);
-		                    if (jugadores == 2) {
-		                        ColisionPersonajeFuegosNivel2(&p2);
-		                    }
-
-		                    // ---------- Animación de muerte ----------
-		                    if (p1.muriendo) {
-		                        p1.tick++;
-
-		                        if (p1.tick >= 6) {
-		                            p1.tick = 0;
-
-		                            if (p1.frame < 4) {
-		                                p1.frame++;
-		                            } else {
-		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
-		                                reiniciarJuego();
-		                                break;
-		                            }
-		                        }
-
-		                        p1.actual_bmp = mario_muere;
-		                        p1.ancho_hoja = 80;
-		                    }
-
-		                    if (jugadores == 2 && p2.muriendo) {
-		                        p2.tick++;
-
-		                        if (p2.tick >= 6) {
-		                            p2.tick = 0;
-
-		                            if (p2.frame < 4) {
-		                                p2.frame++;
-		                            } else {
-		                                // respawn simple de P2
-		                                p2.muriendo = 0;
-		                                p2.frame = 0;
-		                                p2.tick = 0;
-		                                p2.x = LVL2_MARIO_START_X + 24;
-		                                p2.y = alturaPlataformaEnX(7, p2.x + 8);
-		                                p2.x_ant = p2.x;
-		                                p2.y_ant = p2.y;
-		                                p2.y_past = p2.y;
-		                                p2.jumpState = 0;
-		                                p2.jumpProgress = 0;
-		                                p2.inercia_x = 0;
-		                                p2.sube = 0;
-		                                p2.flip = 0;
-		                                p2.actual_bmp = luigi_camina;
-		                                p2.ancho_hoja = 48;
-		                                p2.frame_ant = 255;
-		                            }
-		                        }
-
-		                        if (p2.muriendo) {
-		                            p2.actual_bmp = luigi_muere;
-		                            p2.ancho_hoja = 80;
-		                        }
-		                    }
-
-		                    // ---------- Movimiento ----------
-		                    ProcesarMovimientoNivel2(&p1);
-		                    if (jugadores == 2) {
-		                        ProcesarMovimientoNivel2(&p2);
-		                    }
-
-		                    // ---------- Frames actuales ----------
-		                    {
-		                        int f1 = p1.muriendo ? p1.frame :
-		                                 (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
-
-		                        int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
-
-		                        int f2 = 0;
-		                        int redraw_p2 = 0;
-
-		                        if (jugadores == 2) {
-		                            f2 = p2.muriendo ? p2.frame :
-		                                 (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
-
-		                            redraw_p2 = (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
-		                        }
-
-		                        // ---------- Restaurar fondos viejos ----------
-		                        if (redraw_p1) {
-		                            RestaurarRectNivel2(p1.x_ant, p1.y_ant, 16, 16);
-		                        }
-
-		                        if (redraw_p2) {
-		                            RestaurarRectNivel2(p2.x_ant, p2.y_ant, 16, 16);
-		                        }
-
-		                        // si está muriendo, limpia su posición actual antes de redibujar animación
-		                        if (p1.muriendo) {
-		                            RestaurarRectNivel2(p1.x, p1.y, 16, 16);
-		                        }
-
-		                        if (jugadores == 2 && p2.muriendo) {
-		                            RestaurarRectNivel2(p2.x, p2.y, 16, 16);
-		                        }
-
-		                        // ---------- Victoria ----------
-		                        if (!p1.muriendo && !victoria_activa) {
-		                            if (marioEnPlataformaVictoria_P(&p1, 0)) {
-		                                victoria_activa = 1;
-		                                break;
-		                            }
-		                        }
-
-		                        if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
-		                            if (marioEnPlataformaVictoria_P(&p2, 0)) {
-		                                victoria_activa = 1;
-		                                break;
-		                            }
-		                        }
-
-		                        // ---------- Dibujar personajes ----------
-		                        if (redraw_p1 || p1.muriendo) {
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                p1.x, p1.y,
-		                                16, 16,
-		                                p1.actual_bmp,
-		                                f1,
-		                                p1.ancho_hoja,
-		                                0x0000,
-		                                p1.flip
-		                            );
-		                        }
-
-		                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                p2.x, p2.y,
-		                                16, 16,
-		                                p2.actual_bmp,
-		                                f2,
-		                                p2.ancho_hoja,
-		                                0x0000,
-		                                p2.flip
-		                            );
-		                        }
-
-		                        // ---------- Commit ----------
-		                        if (redraw_p1 || p1.muriendo) {
-		                            p1.x_ant = p1.x;
-		                            p1.y_ant = p1.y;
-		                            p1.frame_ant = f1;
-		                        }
-
-		                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.frame_ant = f2;
-		                        }
-		                    }
-
-		                    HAL_Delay(10);
-		                    break;
-// === Nivel 3 =========================================================================================
-		                case ESTADO_NIVEL_3:
-		                    if (cambioDePantalla) {
-		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"3", 1, 1000);
-
-		                        DibujarNivel3Tileado();
-
-		                        plataformas_actuales = nivel3;
-		                        numPlataformas_actual = 25;
-		                        escaleras_actuales = nivel3_escaleras;
-		                        numEscaleras_actual = 10;
-
-		                        // ---------- P1 ----------
-		                        p1.x = 15;
-		                        p1.y = alturaPlataformaEnX(24, p1.x + 8);
-		                        p1.x_ant = p1.x;
-		                        p1.y_ant = p1.y;
-		                        p1.y_past = p1.y;
-		                        p1.flip = 0;
-		                        p1.actual_bmp = mario_camina;
-		                        p1.ancho_hoja = 48;
-		                        p1.jumpState = 0;
-		                        p1.jumpProgress = 0;
-		                        p1.inercia_x = 0;
-		                        p1.sube = 0;
-		                        p1.muriendo = 0;
-		                        p1.frame = 0;
-		                        p1.tick = 0;
-		                        p1.frame_ant = 255;
-		                        p1.color_transparente = 0x0000;
-
-		                        // ---------- P2 ----------
-		                        p2.muriendo = 0;
-		                        p2.frame = 0;
-		                        p2.tick = 0;
-		                        p2.frame_ant = 255;
-		                        p2.jumpState = 0;
-		                        p2.jumpProgress = 0;
-		                        p2.inercia_x = 0;
-		                        p2.sube = 0;
-		                        p2.flip = 0;
-		                        p2.color_transparente = 0x0000;
-
-		                        if (jugadores == 2) {
-		                            p2.x = 39;
-		                            p2.y = alturaPlataformaEnX(24, p2.x + 8);
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.y_past = p2.y;
-		                            p2.actual_bmp = luigi_camina;
-		                            p2.ancho_hoja = 48;
-		                        }
-
-		                        dk_anim_prev = -1;
-		                        princess_anim_prev = -1;
-		                        frame_counter = 0;
-
-		                        InicializarFuegosNivel3();
-		                        fuego_tick = HAL_GetTick();
-
-		                        cambioDePantalla = 0;
-		                    }
-
-		                    // ---------- DK bailando ----------
-		                    {
-		                        int dk3_anim = (frame_counter / 10) % 4;
-
-		                        if (dk3_anim != dk_anim_prev) {
-		                            RestaurarRectNivel3(LVL2_DK_X, LVL2_DK_Y, 32, 32);
-
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                LVL2_DK_X, LVL2_DK_Y,
-		                                32, 32,
-		                                dkong_dance,
-		                                dk3_anim,
-		                                128,
-		                                0x0000,
-		                                0
-		                            );
-
-		                            dk_anim_prev = dk3_anim;
-		                        }
-		                    }
-
-		                    // ---------- Princesa ----------
-		                    {
-		                        int princess_anim3 = (frame_counter / 15) % 2;
-
-		                        if (princess_anim3 != princess_anim_prev) {
-		                            RestaurarRectNivel3(LVL2_PRINCESS_X, LVL2_PRINCESS_Y, 44, 22);
-
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                LVL2_PRINCESS_X, LVL2_PRINCESS_Y,
-		                                44, 22,
-		                                princesa,
-		                                princess_anim3,
-		                                88,
-		                                0x0000,
-		                                0
-		                            );
-
-		                            princess_anim_prev = princess_anim3;
-		                        }
-		                    }
-
-		                    frame_counter++;
-
-		                    // ---------- Fuegos ----------
-		                    if (HAL_GetTick() - fuego_tick >= 90) {
-		                        fuego_tick = HAL_GetTick();
-		                        ActualizarFuegosNivel3();
-		                        DibujarFuegosNivel3();
-		                    }
-
-		                    // ---------- Colisiones con fuegos ----------
-		                    ColisionPersonajeFuegosNivel3(&p1);
-		                    if (jugadores == 2) {
-		                        ColisionPersonajeFuegosNivel3(&p2);
-		                    }
-
-		                    // ---------- Animación de muerte ----------
-		                    if (p1.muriendo) {
-		                        p1.tick++;
-
-		                        if (p1.tick >= 6) {
-		                            p1.tick = 0;
-
-		                            if (p1.frame < 4) {
-		                                p1.frame++;
-		                            } else {
-		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
-		                                reiniciarJuego();
-		                                break;
-		                            }
-		                        }
-
-		                        p1.actual_bmp = mario_muere;
-		                        p1.ancho_hoja = 80;
-		                    }
-
-		                    if (jugadores == 2 && p2.muriendo) {
-		                        p2.tick++;
-
-		                        if (p2.tick >= 6) {
-		                            p2.tick = 0;
-
-		                            if (p2.frame < 4) {
-		                                p2.frame++;
-		                            } else {
-		                                // respawn simple de P2
-		                                p2.muriendo = 0;
-		                                p2.frame = 0;
-		                                p2.tick = 0;
-		                                p2.x = 39;
-		                                p2.y = alturaPlataformaEnX(24, p2.x + 8);
-		                                p2.x_ant = p2.x;
-		                                p2.y_ant = p2.y;
-		                                p2.y_past = p2.y;
-		                                p2.jumpState = 0;
-		                                p2.jumpProgress = 0;
-		                                p2.inercia_x = 0;
-		                                p2.sube = 0;
-		                                p2.flip = 0;
-		                                p2.actual_bmp = luigi_camina;
-		                                p2.ancho_hoja = 48;
-		                                p2.frame_ant = 255;
-		                            }
-		                        }
-
-		                        if (p2.muriendo) {
-		                            p2.actual_bmp = luigi_muere;
-		                            p2.ancho_hoja = 80;
-		                        }
-		                    }
-
-		                    // ---------- Movimiento ----------
-		                    if (!p1.muriendo) {
-		                        if (comando == 'j' && p1.jumpState == 0) {
-		                            p1.jumpState = 1;
-		                            p1.jumpProgress = 0;
-		                            comando = '0';
-		                            p1.y_past = p1.y;
-		                            p1.actual_bmp = mario_brinca;
-		                            p1.ancho_hoja = 16;
-		                        }
-		                    }
-
-		                    ProcesarMovimientoNivel3(&p1);
-		                    if (jugadores == 2) {
-		                        ProcesarMovimientoNivel3(&p2);
-		                    }
-
-		                    // ---------- Frames actuales ----------
-		                    {
-		                        int f1 = p1.muriendo ? p1.frame :
-		                                 (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
-
-		                        int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
-
-		                        int f2 = 0;
-		                        int redraw_p2 = 0;
-
-		                        if (jugadores == 2) {
-		                            f2 = p2.muriendo ? p2.frame :
-		                                 (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
-
-		                            redraw_p2 = (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
-		                        }
-
-		                        // ---------- Restaurar fondos viejos ----------
-		                        if (redraw_p1) {
-		                            RestaurarRectNivel3(p1.x_ant, p1.y_ant, 16, 16);
-		                        }
-
-		                        if (redraw_p2) {
-		                            RestaurarRectNivel3(p2.x_ant, p2.y_ant, 16, 16);
-		                        }
-
-		                        if (p1.muriendo) {
-		                            RestaurarRectNivel3(p1.x, p1.y, 16, 16);
-		                        }
-
-		                        if (jugadores == 2 && p2.muriendo) {
-		                            RestaurarRectNivel3(p2.x, p2.y, 16, 16);
-		                        }
-
-		                        // ---------- Victoria ----------
-		                        if (!p1.muriendo && !victoria_activa) {
-		                            if (marioEnPlataformaVictoria_P(&p1, 0)) {
-		                                victoria_activa = 1;
-		                                break;
-		                            }
-		                        }
-
-		                        if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
-		                            if (marioEnPlataformaVictoria_P(&p2, 0)) {
-		                                victoria_activa = 1;
-		                                break;
-		                            }
-		                        }
-
-		                        // ---------- Dibujar personajes ----------
-		                        if (redraw_p1 || p1.muriendo) {
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                p1.x, p1.y,
-		                                16, 16,
-		                                p1.actual_bmp,
-		                                f1,
-		                                p1.ancho_hoja,
-		                                0x0000,
-		                                p1.flip
-		                            );
-		                        }
-
-		                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                p2.x, p2.y,
-		                                16, 16,
-		                                p2.actual_bmp,
-		                                f2,
-		                                p2.ancho_hoja,
-		                                0x0000,
-		                                p2.flip
-		                            );
-		                        }
-
-		                        // ---------- Commit ----------
-		                        if (redraw_p1 || p1.muriendo) {
-		                            p1.x_ant = p1.x;
-		                            p1.y_ant = p1.y;
-		                            p1.frame_ant = f1;
-		                        }
-
-		                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.frame_ant = f2;
-		                        }
-		                    }
-
-		                    HAL_Delay(10);
-		                    break;
-
-// === Nivel 4 ===================================================================================
-		                case ESTADO_NIVEL_4:
-		                    if (cambioDePantalla) {
-		                    	HAL_UART_Transmit(&huart3, (uint8_t*)"4", 1, 1000);
-
-		                        DibujarNivel4Tileado();
-
-		                        plataformas_actuales = nivel4;
-		                        numPlataformas_actual = 14;
-		                        escaleras_actuales = nivel4_escaleras;
-		                        numEscaleras_actual = 4;
-
-		                        // ---------- P1 ----------
-		                        p1.x = 156;
-		                        p1.y = alturaPlataformaEnX(13, p1.x + 8);
-		                        p1.x_ant = p1.x;
-		                        p1.y_ant = p1.y;
-		                        p1.y_past = p1.y;
-		                        p1.flip = 0;
-		                        p1.actual_bmp = mario_camina;
-		                        p1.ancho_hoja = 48;
-		                        p1.jumpState = 0;
-		                        p1.jumpProgress = 0;
-		                        p1.inercia_x = 0;
-		                        p1.sube = 0;
-		                        p1.muriendo = 0;
-		                        p1.frame = 0;
-		                        p1.tick = 0;
-		                        p1.frame_ant = 255;
-		                        p1.color_transparente = 0x0000;
-
-		                        // ---------- P2 ----------
-		                        p2.muriendo = 0;
-		                        p2.frame = 0;
-		                        p2.tick = 0;
-		                        p2.frame_ant = 255;
-		                        p2.jumpState = 0;
-		                        p2.jumpProgress = 0;
-		                        p2.inercia_x = 0;
-		                        p2.sube = 0;
-		                        p2.flip = 0;
-		                        p2.color_transparente = 0x0000;
-
-		                        if (jugadores == 2) {
-		                            p2.x = 180;
-		                            p2.y = alturaPlataformaEnX(13, p2.x + 8);
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.y_past = p2.y;
-		                            p2.actual_bmp = luigi_camina;
-		                            p2.ancho_hoja = 48;
-		                        }
-
-		                        dk_anim_prev = -1;
-		                        princess_anim_prev = -1;
-		                        frame_counter = 0;
-
-		                        InicializarFuegosNivel4();
-		                        fuego_tick = HAL_GetTick();
-
-		                        cambioDePantalla = 0;
-		                    }
-
-		                    // ---------- DK bailando ----------
-		                    {
-		                        int dk4_anim = (frame_counter / 10) % 4;
-
-		                        if (dk4_anim != dk_anim_prev) {
-		                            RestaurarRectNivel4(144, 48, 32, 32);
-
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                144, 48,
-		                                32, 32,
-		                                dkong_dance,
-		                                dk4_anim,
-		                                128,
-		                                0x0000,
-		                                0
-		                            );
-
-		                            dk_anim_prev = dk4_anim;
-		                        }
-		                    }
-
-		                    // ---------- Princesa ----------
-		                    {
-		                        int princess_anim4 = (frame_counter / 15) % 2;
-
-		                        if (princess_anim4 != princess_anim_prev) {
-		                            RestaurarRectNivel4(152, 10, 44, 22);
-
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                152, 10,
-		                                44, 22,
-		                                princesa,
-		                                princess_anim4,
-		                                88,
-		                                0x0000,
-		                                0
-		                            );
-
-		                            princess_anim_prev = princess_anim4;
-		                        }
-		                    }
-
-		                    frame_counter++;
-
-		                    // ---------- Fuegos ----------
-		                    if (HAL_GetTick() - fuego_tick >= 90) {
-		                        fuego_tick = HAL_GetTick();
-		                        ActualizarFuegosNivel4();
-		                        DibujarFuegosNivel4();
-		                    }
-
-		                    // ---------- Colisiones con fuegos ----------
-		                    ColisionPersonajeFuegosNivel4(&p1);
-		                    if (jugadores == 2) {
-		                        ColisionPersonajeFuegosNivel4(&p2);
-		                    }
-
-		                    // ---------- Animación de muerte ----------
-		                    if (p1.muriendo) {
-		                        p1.tick++;
-
-		                        if (p1.tick >= 6) {
-		                            p1.tick = 0;
-
-		                            if (p1.frame < 4) {
-		                                p1.frame++;
-		                            } else {
-		                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
-		                                reiniciarJuego();
-		                                break;
-		                            }
-		                        }
-
-		                        p1.actual_bmp = mario_muere;
-		                        p1.ancho_hoja = 80;
-		                    }
-
-		                    if (jugadores == 2 && p2.muriendo) {
-		                        p2.tick++;
-
-		                        if (p2.tick >= 6) {
-		                            p2.tick = 0;
-
-		                            if (p2.frame < 4) {
-		                                p2.frame++;
-		                            } else {
-		                                // Respawn simple de P2
-		                                p2.muriendo = 0;
-		                                p2.frame = 0;
-		                                p2.tick = 0;
-		                                p2.x = 180;
-		                                p2.y = alturaPlataformaEnX(13, p2.x + 8);
-		                                p2.x_ant = p2.x;
-		                                p2.y_ant = p2.y;
-		                                p2.y_past = p2.y;
-		                                p2.jumpState = 0;
-		                                p2.jumpProgress = 0;
-		                                p2.inercia_x = 0;
-		                                p2.sube = 0;
-		                                p2.flip = 0;
-		                                p2.actual_bmp = luigi_camina;
-		                                p2.ancho_hoja = 48;
-		                                p2.frame_ant = 255;
-		                            }
-		                        }
-
-		                        if (p2.muriendo) {
-		                            p2.actual_bmp = luigi_muere;
-		                            p2.ancho_hoja = 80;
-		                        }
-		                    }
-
-		                    // ---------- Movimiento ----------
-		                    ProcesarMovimientoNivel4(&p1);
-		                    if (jugadores == 2) {
-		                        ProcesarMovimientoNivel4(&p2);
-		                    }
-
-		                    // ---------- Frames actuales ----------
-		                    {
-		                        int f1 = p1.muriendo ? p1.frame :
-		                                 (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
-
-		                        int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
-
-		                        int f2 = 0;
-		                        int redraw_p2 = 0;
-
-		                        if (jugadores == 2) {
-		                            f2 = p2.muriendo ? p2.frame :
-		                                 (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
-
-		                            redraw_p2 = (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
-		                        }
-
-		                        // ---------- Restaurar fondos viejos ----------
-		                        if (redraw_p1) {
-		                            RestaurarRectNivel4(p1.x_ant, p1.y_ant, 16, 16);
-		                        }
-
-		                        if (redraw_p2) {
-		                            RestaurarRectNivel4(p2.x_ant, p2.y_ant, 16, 16);
-		                        }
-
-		                        if (p1.muriendo) {
-		                            RestaurarRectNivel4(p1.x, p1.y, 16, 16);
-		                        }
-
-		                        if (jugadores == 2 && p2.muriendo) {
-		                            RestaurarRectNivel4(p2.x, p2.y, 16, 16);
-		                        }
-
-		                        // ---------- Victoria ----------
-		                        if (!p1.muriendo && !victoria_activa) {
-		                            if (hayColision(p1.x, p1.y, 16, 16, 144, 48, 32, 32)) {
-		                                victoria_activa = 1;
-		                                break;
-		                            }
-		                        }
-
-		                        if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
-		                            if (hayColision(p2.x, p2.y, 16, 16, 144, 48, 32, 32)) {
-		                                victoria_activa = 1;
-		                                break;
-		                            }
-		                        }
-
-		                        // ---------- Dibujar personajes ----------
-		                        if (redraw_p1 || p1.muriendo) {
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                p1.x, p1.y,
-		                                16, 16,
-		                                p1.actual_bmp,
-		                                f1,
-		                                p1.ancho_hoja,
-		                                0x0000,
-		                                p1.flip
-		                            );
-		                        }
-
-		                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
-		                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
-		                            LCD_DibujarSpriteTransparente(
-		                                p2.x, p2.y,
-		                                16, 16,
-		                                p2.actual_bmp,
-		                                f2,
-		                                p2.ancho_hoja,
-		                                0x0000,
-		                                p2.flip
-		                            );
-		                        }
-
-		                        // ---------- Commit ----------
-		                        if (redraw_p1 || p1.muriendo) {
-		                            p1.x_ant = p1.x;
-		                            p1.y_ant = p1.y;
-		                            p1.frame_ant = f1;
-		                        }
-
-		                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
-		                            p2.x_ant = p2.x;
-		                            p2.y_ant = p2.y;
-		                            p2.frame_ant = f2;
-		                        }
-		                    }
-
-		                    HAL_Delay(10);
-		                    break;
-
-		            }
+				// Solo se procesan entradas si no hay victoria activa y los jugadores no están en animación de muerte.
+				if (!victoria_activa && !p1.muriendo && (jugadores == 1 || !p2.muriendo)) {
+				    // =====================================================
+				    // 1. LÓGICA JUGADOR 1 (Control 1 - UART1)
+				    // =====================================================
+				    // Detecta cambios puntuales del control 1 para evitar repetir acciones como salto o selección.
+				    if (ctrl_state1 != prev_state1) {
+				        uint8_t changed = ctrl_state1 ^ prev_state1;
+
+				        if (estadoActual == ESTADO_PORTADA) {
+				            if ((changed & BTN_UP) && (ctrl_state1 & BTN_UP)) menu_up = 1;
+				            if ((changed & BTN_DOWN) && (ctrl_state1 & BTN_DOWN)) menu_down = 1;
+				            if ((changed & BTN_SQUARE) && (ctrl_state1 & BTN_SQUARE)) select = 1;
+				        } else {
+				            // Salto P1
+				            if ((changed & BTN_X) && (ctrl_state1 & BTN_X)) {
+				                if (p1.jumpState == 0) {
+				                    p1.jumpState = 1;
+				                    p1.jumpProgress = 0;
+				                    p1.y_past = p1.y;
+				                    p1.actual_bmp = mario_brinca;
+				                    p1.ancho_hoja = 16;
+				                }
+				            }
+				        }
+				        prev_state1 = ctrl_state1;
+				    }
+
+				    // Lógica continua P1 (Caminar / Escalar)
+				    // Mientras se mantenga presionado un botón, se actualiza movimiento, orientación e intento de escalera.
+				    if (estadoActual != ESTADO_PORTADA) {
+				        if (p1.jumpState == 0) {
+				            if (ctrl_state1 & BTN_RIGHT) {
+				                p1.x += 3; p1.flip = 1; p1.inercia_x = 2;
+				                p1.actual_bmp = mario_camina; p1.ancho_hoja = 48;
+				            } else if (ctrl_state1 & BTN_LEFT) {
+				                p1.x -= 3; p1.flip = 0; p1.inercia_x = -2;
+				                p1.actual_bmp = mario_camina; p1.ancho_hoja = 48;
+				            } else { p1.inercia_x = 0; }
+
+				            if (ctrl_state1 & BTN_UP) p1.sube = 1;
+				            else if (ctrl_state1 & BTN_DOWN) p1.sube = 2;
+				            else p1.sube = 0;
+				        }
+				    }
+
+				    // =====================================================
+				    // 2. LÓGICA JUGADOR 2 (Control 2 - UART6)
+				    // =====================================================
+				    // Si la partida es de dos jugadores, se habilita la lectura y movimiento independiente de Luigi.
+				    if (jugadores == 2) {
+				        if (ctrl_state6 != prev_state2) {
+				            uint8_t changed = ctrl_state6 ^ prev_state2;
+
+				            // Salto P2
+				            if ((changed & BTN_X) && (ctrl_state6 & BTN_X)) {
+				                if (p2.jumpState == 0) {
+				                    p2.jumpState = 1;
+				                    p2.jumpProgress = 0;
+				                    p2.y_past = p2.y;
+				                    p2.actual_bmp = luigi_brinca; // Usar sprite de Luigi
+				                    p2.ancho_hoja = 16;
+				                }
+				            }
+				            prev_state2 = ctrl_state6;
+				        }
+
+				        // Lógica continua P2
+				        if (estadoActual != ESTADO_PORTADA) {
+				            if (p2.jumpState == 0) {
+				                if (ctrl_state6 & BTN_RIGHT) {
+				                    p2.x += 3; p2.flip = 1; p2.inercia_x = 2;
+				                    p2.actual_bmp = luigi_camina; p2.ancho_hoja = 48;
+				                } else if (ctrl_state6 & BTN_LEFT) {
+				                    p2.x -= 3; p2.flip = 0; p2.inercia_x = -2;
+				                    p2.actual_bmp = luigi_camina; p2.ancho_hoja = 48;
+				                } else { p2.inercia_x = 0; }
+
+				                if (ctrl_state6 & BTN_UP) p2.sube = 1;
+				                else if (ctrl_state6 & BTN_DOWN) p2.sube = 2;
+				                else p2.sube = 0;
+				            }
+				        }
+				    }
+
+				    // =====================================================
+				    // 3. LÓGICA TERMINAL (Debug / Comando UART2)
+				    // =====================================================
+				    // Comandos recibidos por UART2 para depuración, principalmente controlan a P1.
+				    if (ctrl_cmd2 != 0) {
+				        comando = ctrl_cmd2; ctrl_cmd2 = 0;
+				        // Aplicar comandos de terminal solo a P1 para debug
+				        if (estadoActual == ESTADO_PORTADA) {
+				            if (comando == 'u') menu_up = 1;
+				            if (comando == 'd') menu_down = 1;
+				            if (comando == 's') select = 1;
+				        } else {
+				            if (comando == 'j' && p1.jumpState == 0) {
+				                p1.jumpState = 1; p1.y_past = p1.y;
+				                p1.actual_bmp = mario_brinca; p1.ancho_hoja = 16;
+				            }
+				            if (comando == 'r') { p1.x += 5; p1.flip = 1; p1.inercia_x = 2; }
+				            if (comando == 'l') { p1.x -= 5; p1.flip = 0; p1.inercia_x = -2; }
+				        }
+				    }
+				}
+				// Si se activó una condición de victoria, se pausa la lógica normal y se muestra la pantalla final.
+				if (victoria_activa) {
+				    victoria();
+				    HAL_Delay(10);
+				    continue;
+				}
+				            // --- DIBUJAR SEGÚN EL ESTADO ---
+				            // El switch principal decide si se muestra el menú o si se ejecuta la lógica del nivel actual.
+				            switch (estadoActual) {
+		// === Menu ============================================================================================
+				            case ESTADO_PORTADA:
+				                // Estado de portada: permite elegir cantidad de jugadores y luego el nivel a jugar.
+				                switch (menu) {
+				                    case 1: // Menú selector de jugadores
+				                        // Se muestra la primera pantalla del menú y se alterna entre 1P y 2P.
+				                        if (menu_print == 1) {
+				                            LCD_Clear(0x0000);
+				                            Dibujar_Imagen_Bin("pantalla_de_inicio_f.bin", 0, 0, 320, 240);
+				                            DibujarSelectorMenu();
+				                            menu_print = 0;
+				                            cambioDePantalla = 0;
+				                            HAL_UART_Transmit(&huart3, (uint8_t*)"M", 1, 1000);
+				                            //HAL_UART_Transmit(&huart2, (uint8_t*)"M", 1, 1000);
+				                        }
+
+				                        if (menu_up == 1) {
+				                            BorrarSelectorMenu();
+
+				                            if (jugadores == 1) jugadores = 2;
+				                            else jugadores = 1;
+
+				                            DibujarSelectorMenu();
+				                            menu_up = 0;
+				                        }
+				                        else if (menu_down == 1) {
+				                            BorrarSelectorMenu();
+
+				                            if (jugadores == 1) jugadores = 2;
+				                            else jugadores = 1;
+
+				                            DibujarSelectorMenu();
+				                            menu_down = 0;
+				                        }
+
+				                        if (select == 1) {
+				                            ConfirmarSeleccionMenu();
+				                        }
+				                        break;
+
+				                    case 2: // Menú selector de nivel
+				                        // Se muestra la segunda pantalla del menú y se navega entre los niveles disponibles.
+				                        if (menu_print == 1) {
+				                            LCD_Clear(0x0000);
+				                            Dibujar_Imagen_Bin("pantalla_de_inicio_l.bin", 0, 0, 320, 240);
+				                            DibujarSelectorMenu();
+				                            menu_print = 0;
+				                            cambioDePantalla = 0;
+				                        }
+
+				                        if (menu_up == 1) {
+				                            BorrarSelectorMenu();
+
+				                            if (nivel == 1) nivel = 4;
+				                            else nivel--;
+
+				                            DibujarSelectorMenu();
+				                            menu_up = 0;
+				                        }
+				                        else if (menu_down == 1) {
+				                            BorrarSelectorMenu();
+
+				                            if (nivel == 4) nivel = 1;
+				                            else nivel++;
+
+				                            DibujarSelectorMenu();
+				                            menu_down = 0;
+				                        }
+
+				                        if (select == 1) {
+				                            ConfirmarSeleccionMenu();
+				                        }
+				                        break;
+				                }
+				                break;
+
+		// === NIVEL 1 ===================================================================================
+				                case ESTADO_NIVEL_1:
+				                    // Nivel 1: inicializa plataformas, escaleras, barriles, DK, princesa y jugadores.
+				                    if (cambioDePantalla) {
+				                        // Esta sección se ejecuta una sola vez al entrar al nivel 1.
+				                    	HAL_UART_Transmit(&huart3, (uint8_t*)"1", 1, 1000);
+
+				                        LCD_Clear(0x0000);
+
+				                        plataformas_actuales = nivel1;
+				                        numPlataformas_actual = 7;
+				                        escaleras_actuales = nivel1_escaleras;
+				                        numEscaleras_actual = 8;
+
+				                        DibujarNivel1Tileado();
+
+				                        cambioDePantalla = 0;
+				                        frame_counter = 0;
+				                        spawn_timer = 0;
+				                        dk_lanzando = 0;
+				                        dk_anim = 0;
+				                        dk_anim_tick = 0;
+				                        dk_barril_pendiente = 0;
+				                        dk_spawns_pendientes = 0;
+				                        dk_anim_prev = -1;
+				                        princess_anim_prev = -1;
+
+				                        for (int i = 0; i < MAX_BARRILES; i++) {
+				                            barriles[i].activo = 0;
+				                            barriles[i].x = 0;
+				                            barriles[i].y = 0;
+				                            barriles[i].x_ant = 0;
+				                            barriles[i].y_ant = 0;
+				                            barriles[i].anim = 0;
+				                            barriles[i].estado = BARRIL_RODANDO;
+				                            barriles[i].plataforma_actual = -1;
+				                            barriles[i].plataforma_destino = -1;
+				                            barriles[i].escalera_objetivo = -1;
+				                            barriles[i].dir = 1;
+				                        }
+
+				                        // Inicializar P1
+				                        p1.x = 15;
+				                        p1.y = 219;
+				                        p1.x_ant = p1.x;
+				                        p1.y_ant = p1.y;
+				                        p1.flip = 0;
+				                        p1.y_past = p1.y;
+				                        p1.jumpState = 0;
+				                        p1.jumpProgress = 0;
+				                        p1.inercia_x = 0;
+				                        p1.sube = 0;
+				                        p1.muriendo = 0;
+				                        p1.frame = 0;
+				                        p1.tick = 0;
+				                        p1.actual_bmp = mario_camina;
+				                        p1.ancho_hoja = 48;
+				                        p1.color_transparente = 0x0000;
+				                        p1.frame_ant = 255;   // fuerza primer dibujo
+
+				                        // Inicializar P2
+				                        p2.muriendo = 0;
+				                        p2.frame = 0;
+				                        p2.tick = 0;
+				                        p2.frame_ant = 255;
+				                        p2.jumpState = 0;
+				                        p2.jumpProgress = 0;
+				                        p2.inercia_x = 0;
+				                        p2.sube = 0;
+				                        p2.flip = 0;
+				                        p2.color_transparente = 0x0000;
+
+				                        if (jugadores == 2) {
+				                            p2.x = 40;
+				                            p2.y = 219;
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.y_past = p2.y;
+				                            p2.actual_bmp = luigi_camina;
+				                            p2.ancho_hoja = 48;
+				                        }
+				                    }
+
+				                    // --- 1. LÓGICA DE DONKEY KONG (Spawn de barriles) ---
+				                    // Controla cuándo DK entra en animación de lanzamiento y cuándo aparece un barril.
+				                    spawn_timer++;
+				                    if (!dk_lanzando) {
+				                        int activos = 0;
+				                        for (int i = 0; i < MAX_BARRILES; i++) {
+				                            if (barriles[i].activo) activos++;
+				                        }
+
+				                        if ((dk_spawns_pendientes > 0 || spawn_timer > 150) &&
+				                            activos < MaxBarrilesActivosNivel1()) {
+
+				                            dk_lanzando = 1;
+				                            dk_anim = 0;
+				                            dk_anim_tick = 0;
+				                            dk_barril_pendiente = 1;
+
+				                            if (dk_spawns_pendientes > 0) dk_spawns_pendientes--;
+				                            spawn_timer = 0;
+				                        }
+				                    }
+
+				                    if (dk_lanzando) {
+				                        dk_anim_tick++;
+				                        if (dk_anim_tick >= 6) {
+				                            dk_anim_tick = 0;
+				                            dk_anim++;
+
+				                            if (dk_anim == 2 && dk_barril_pendiente) {
+				                                crearBarril();
+				                                dk_barril_pendiente = 0;
+				                            }
+
+				                            if (dk_anim > 2) {
+				                                dk_anim = 0;
+				                                dk_lanzando = 0;
+				                            }
+				                        }
+				                    }
+
+				                    // --- 2. ACTUALIZAR OBJETOS Y JUGADORES ---
+				                    // Se mueven los barriles y luego se procesa la física básica de cada jugador.
+				                    actualizarBarriles();
+				                    ProcesarMovimientoNivel1(&p1);
+				                    if (jugadores == 2) ProcesarMovimientoNivel1(&p2);
+
+				                    // --- 3. DETECTAR COLISIONES (Barriles contra P1 y P2) ---
+				                    // Si un barril toca a un jugador, se activa su estado de muerte.
+				                    for (int i = 0; i < MAX_BARRILES; i++) {
+				                        if (!barriles[i].activo) continue;
+
+				                        if (!p1.muriendo &&
+				                            hayColision(p1.x, p1.y, 16, 16, barriles[i].x + 3, barriles[i].y + 2, 8, 8)) {
+				                            p1.muriendo = 1;
+				                            p1.frame = 0;
+				                            p1.tick = 0;
+				                        }
+
+				                        if (jugadores == 2 && !p2.muriendo &&
+				                            hayColision(p2.x, p2.y, 16, 16, barriles[i].x + 3, barriles[i].y + 2, 8, 8)) {
+				                            p2.muriendo = 1;
+				                            p2.frame = 0;
+				                            p2.tick = 0;
+				                        }
+				                    }
+
+				                    // --- 4. GESTIÓN DE MUERTE (Animación) ---
+				                    // Avanza la animación de muerte y reinicia la partida cuando corresponde.
+				                    if (p1.muriendo) {
+				                        p1.tick++;
+				                        if (p1.tick >= 6) {
+				                            p1.tick = 0;
+				                            p1.frame++;
+				                            if (p1.frame >= 5) {
+				                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
+				                                reiniciarJuego();
+				                                break;
+				                            }
+				                        }
+				                        p1.actual_bmp = mario_muere;
+				                        p1.ancho_hoja = 80;
+				                    }
+
+				                    if (jugadores == 2 && p2.muriendo) {
+				                        p2.tick++;
+				                        if (p2.tick >= 6) {
+				                            p2.tick = 0;
+				                            p2.frame++;
+				                            if (p2.frame >= 5) {
+				                                p2.muriendo = 0;   // o aquí luego manejas vidas
+				                                p2.frame = 0;
+				                                p2.tick = 0;
+				                                p2.actual_bmp = luigi_camina;
+				                                p2.ancho_hoja = 48;
+				                            }
+				                        }
+				                        if (p2.muriendo) {
+				                            p2.actual_bmp = luigi_muere;
+				                            p2.ancho_hoja = 80;
+				                        }
+				                    }
+
+				                    // --- 5. PREPARAR FRAMES ACTUALES ---
+				                    // Calcula qué frame debe dibujarse para jugadores, DK y princesa.
+				                    frame_counter++;
+
+				                    int princess_anim = (frame_counter / 15) % 2;
+
+				                    int f1 = p1.muriendo ? p1.frame :
+				                             (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
+
+				                    int f2 = 0;
+				                    if (jugadores == 2) {
+				                        f2 = p2.muriendo ? p2.frame :
+				                             (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
+				                    }
+
+				                    int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
+				                    int redraw_p2 = (jugadores == 2) &&
+				                                    (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
+
+				                    if (!p1.muriendo && !victoria_activa) {
+				                        if (marioEnPlataformaVictoria_P(&p1, 0)) {
+				                            victoria_activa = 1;
+				                            break;
+				                        }
+				                    }
+
+				                    if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
+				                        if (marioEnPlataformaVictoria_P(&p2, 0)) {
+				                            victoria_activa = 1;
+				                            break;
+				                        }
+				                    }
+
+				                    // --- 6. RESTAURAR TODO LO VIEJO PRIMERO ---
+				                    // Antes de dibujar sprites nuevos, se restaura el fondo donde estaban los sprites anteriores.
+
+				                    // A. DK
+				                    if (dk_anim != dk_anim_prev) {
+				                        RestaurarRectNivel1(35, 39, 32, 32);
+				                    }
+
+				                    // B. Princesa
+				                    if (princess_anim != princess_anim_prev) {
+				                        RestaurarRectNivel1(127, 24, 44, 22);
+				                    }
+
+				                    // C. Barriles
+				                    for (int i = 0; i < MAX_BARRILES; i++) {
+				                        if (barriles[i].activo) {
+				                            RestaurarFondoBarrilSeguro(barriles[i].x_ant, barriles[i].y_ant);
+				                        }
+				                    }
+
+				                    // D. Jugadores
+				                    if (redraw_p1) {
+				                        RestaurarRectNivel1(p1.x_ant, p1.y_ant, 16, 16);
+				                    }
+
+				                    if (redraw_p2) {
+				                        RestaurarRectNivel1(p2.x_ant, p2.y_ant, 16, 16);
+				                    }
+
+				                    // --- 7. DIBUJAR TODO LO NUEVO DESPUÉS ---
+				                    // Dibuja los sprites actualizados respetando el orden para evitar parpadeos o residuos.
+
+				                    // A. Donkey Kong
+				                    if (dk_anim != dk_anim_prev) {
+				                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                        LCD_DibujarSpriteTransparente(
+				                            35, 39,
+				                            32, 32,
+				                            donkey_barril,
+				                            dk_anim,
+				                            96,
+				                            0x0000,
+				                            0
+				                        );
+				                    }
+
+				                    // B. Princesa
+				                    if (princess_anim != princess_anim_prev) {
+				                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                        LCD_DibujarSpriteTransparente(
+				                            127, 24,
+				                            44, 22,
+				                            princesa,
+				                            princess_anim,
+				                            88,
+				                            0x0000,
+				                            0
+				                        );
+				                    }
+
+				                    // C. Barriles
+				                    for (int i = 0; i < MAX_BARRILES; i++) {
+				                        if (!barriles[i].activo) continue;
+
+				                        const uint16_t *sprite_b =
+				                            (barriles[i].estado == BARRIL_BAJANDO_ESC) ? barril_frontal : barril_lateral;
+				                        int hoja_b =
+				                            (barriles[i].estado == BARRIL_BAJANDO_ESC) ? 32 : 64;
+
+				                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                        LCD_DibujarSpriteTransparente(
+				                            barriles[i].x, barriles[i].y,
+				                            16, 16,
+				                            sprite_b,
+				                            barriles[i].anim % (hoja_b / 16),
+				                            hoja_b,
+				                            0x0000,
+				                            0
+				                        );
+				                    }
+
+				                    // D. P1
+				                    if (redraw_p1) {
+				                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                        LCD_DibujarSpriteTransparente(
+				                            p1.x, p1.y,
+				                            16, 16,
+				                            p1.actual_bmp,
+				                            f1,
+				                            p1.ancho_hoja,
+				                            0x0000,
+				                            p1.flip
+				                        );
+				                    }
+
+				                    // E. P2
+				                    if (redraw_p2) {
+				                        while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                        LCD_DibujarSpriteTransparente(
+				                            p2.x, p2.y,
+				                            16, 16,
+				                            p2.actual_bmp,
+				                            f2,
+				                            p2.ancho_hoja,
+				                            0x0000,
+				                            p2.flip
+				                        );
+				                    }
+
+				                    // --- 8. COMMIT DE ESTADOS NUEVOS ---
+				                    // Guarda las posiciones y frames actuales para comparar en el siguiente ciclo.
+				                    if (dk_anim != dk_anim_prev) {
+				                        dk_anim_prev = dk_anim;
+				                    }
+
+				                    if (princess_anim != princess_anim_prev) {
+				                        princess_anim_prev = princess_anim;
+				                    }
+
+				                    for (int i = 0; i < MAX_BARRILES; i++) {
+				                        if (barriles[i].activo) {
+				                            barriles[i].x_ant = barriles[i].x;
+				                            barriles[i].y_ant = barriles[i].y;
+				                        }
+				                    }
+
+				                    if (redraw_p1) {
+				                        p1.x_ant = p1.x;
+				                        p1.y_ant = p1.y;
+				                        p1.frame_ant = f1;
+				                    }
+
+				                    if (redraw_p2) {
+				                        p2.x_ant = p2.x;
+				                        p2.y_ant = p2.y;
+				                        p2.frame_ant = f2;
+				                    }
+
+				                    break;
+
+		// === Nivel 2 ========================================================================================
+				                case ESTADO_NIVEL_2:
+				                    // Nivel 2: usa tilemap propio, fuegos con rutas, DK bailando y lógica de victoria por plataforma.
+				                    if (cambioDePantalla) {
+				                        // Esta sección se ejecuta una sola vez al entrar al nivel 2.
+				                    	HAL_UART_Transmit(&huart3, (uint8_t*)"2", 1, 1000);
+
+				                        DibujarNivel2Tileado();
+
+				                        plataformas_actuales = nivel2;
+				                        numPlataformas_actual = 8;
+				                        escaleras_actuales = nivel2_escaleras;
+				                        numEscaleras_actual = 12;
+
+				                        // ---------- P1 ----------
+				                        p1.x = LVL2_MARIO_START_X;
+				                        p1.y = alturaPlataformaEnX(7, p1.x + 8);
+				                        p1.x_ant = p1.x;
+				                        p1.y_ant = p1.y;
+				                        p1.y_past = p1.y;
+				                        p1.flip = 0;
+				                        p1.actual_bmp = mario_camina;
+				                        p1.ancho_hoja = 48;
+				                        p1.jumpState = 0;
+				                        p1.jumpProgress = 0;
+				                        p1.inercia_x = 0;
+				                        p1.sube = 0;
+				                        p1.muriendo = 0;
+				                        p1.frame = 0;
+				                        p1.tick = 0;
+				                        p1.frame_ant = 255;
+				                        p1.color_transparente = 0x0000;
+
+				                        // ---------- P2 ----------
+				                        p2.muriendo = 0;
+				                        p2.frame = 0;
+				                        p2.tick = 0;
+				                        p2.frame_ant = 255;
+				                        p2.jumpState = 0;
+				                        p2.jumpProgress = 0;
+				                        p2.inercia_x = 0;
+				                        p2.sube = 0;
+				                        p2.flip = 0;
+				                        p2.color_transparente = 0x0000;
+
+				                        if (jugadores == 2) {
+				                            p2.x = LVL2_MARIO_START_X + 24;
+				                            p2.y = alturaPlataformaEnX(7, p2.x + 8);
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.y_past = p2.y;
+				                            p2.actual_bmp = luigi_camina;
+				                            p2.ancho_hoja = 48;
+				                        }
+
+				                        dk_anim_prev = -1;
+				                        princess_anim_prev = -1;
+				                        frame_counter = 0;
+
+				                        InicializarFuegosNivel2();
+				                        fuego_tick = HAL_GetTick();
+
+				                        cambioDePantalla = 0;
+				                    }
+
+				                    // ---------- DK bailando ----------
+				                    // Actualiza la animación de DK solo cuando cambia el frame.
+				                    {
+				                        int dk2_anim = (frame_counter / 10) % 4;
+
+				                        if (dk2_anim != dk_anim_prev) {
+				                            RestaurarRectNivel2(LVL2_DK_X, LVL2_DK_Y, 32, 32);
+
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                LVL2_DK_X, LVL2_DK_Y,
+				                                32, 32,
+				                                dkong_dance,
+				                                dk2_anim,
+				                                128,
+				                                0x0000,
+				                                0
+				                            );
+
+				                            dk_anim_prev = dk2_anim;
+				                        }
+				                    }
+
+				                    // ---------- Princesa ----------
+				                    // Actualiza la animación de la princesa sin redibujarla innecesariamente.
+				                    {
+				                        int princess_anim2 = (frame_counter / 15) % 2;
+
+				                        if (princess_anim2 != princess_anim_prev) {
+				                            RestaurarRectNivel2(LVL2_PRINCESS_X, LVL2_PRINCESS_Y, 44, 22);
+
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                LVL2_PRINCESS_X, LVL2_PRINCESS_Y,
+				                                44, 22,
+				                                princesa,
+				                                princess_anim2,
+				                                88,
+				                                0x0000,
+				                                0
+				                            );
+
+				                            princess_anim_prev = princess_anim2;
+				                        }
+				                    }
+
+				                    frame_counter++;
+
+				                    // ---------- Fuegos ----------
+				                    // Los enemigos de fuego se actualizan por tiempo para mantener una velocidad estable.
+				                    if (HAL_GetTick() - fuego_tick >= 90) {
+				                        fuego_tick = HAL_GetTick();
+				                        ActualizarFuegosNivel2();
+				                        DibujarFuegosNivel2();
+				                    }
+
+				                    // ---------- Colisiones con fuegos ----------
+				                    ColisionPersonajeFuegosNivel2(&p1);
+				                    if (jugadores == 2) {
+				                        ColisionPersonajeFuegosNivel2(&p2);
+				                    }
+
+				                    // ---------- Animación de muerte ----------
+				                    if (p1.muriendo) {
+				                        p1.tick++;
+
+				                        if (p1.tick >= 6) {
+				                            p1.tick = 0;
+
+				                            if (p1.frame < 4) {
+				                                p1.frame++;
+				                            } else {
+				                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
+				                                reiniciarJuego();
+				                                break;
+				                            }
+				                        }
+
+				                        p1.actual_bmp = mario_muere;
+				                        p1.ancho_hoja = 80;
+				                    }
+
+				                    if (jugadores == 2 && p2.muriendo) {
+				                        p2.tick++;
+
+				                        if (p2.tick >= 6) {
+				                            p2.tick = 0;
+
+				                            if (p2.frame < 4) {
+				                                p2.frame++;
+				                            } else {
+				                                // respawn simple de P2
+				                                p2.muriendo = 0;
+				                                p2.frame = 0;
+				                                p2.tick = 0;
+				                                p2.x = LVL2_MARIO_START_X + 24;
+				                                p2.y = alturaPlataformaEnX(7, p2.x + 8);
+				                                p2.x_ant = p2.x;
+				                                p2.y_ant = p2.y;
+				                                p2.y_past = p2.y;
+				                                p2.jumpState = 0;
+				                                p2.jumpProgress = 0;
+				                                p2.inercia_x = 0;
+				                                p2.sube = 0;
+				                                p2.flip = 0;
+				                                p2.actual_bmp = luigi_camina;
+				                                p2.ancho_hoja = 48;
+				                                p2.frame_ant = 255;
+				                            }
+				                        }
+
+				                        if (p2.muriendo) {
+				                            p2.actual_bmp = luigi_muere;
+				                            p2.ancho_hoja = 80;
+				                        }
+				                    }
+
+				                    // ---------- Movimiento ----------
+				                    ProcesarMovimientoNivel2(&p1);
+				                    if (jugadores == 2) {
+				                        ProcesarMovimientoNivel2(&p2);
+				                    }
+
+				                    // ---------- Frames actuales ----------
+				                    // Se calculan frames y banderas de redibujado para optimizar el refresco de pantalla.
+				                    {
+				                        int f1 = p1.muriendo ? p1.frame :
+				                                 (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
+
+				                        int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
+
+				                        int f2 = 0;
+				                        int redraw_p2 = 0;
+
+				                        if (jugadores == 2) {
+				                            f2 = p2.muriendo ? p2.frame :
+				                                 (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
+
+				                            redraw_p2 = (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
+				                        }
+
+				                        // ---------- Restaurar fondos viejos ----------
+				                        if (redraw_p1) {
+				                            RestaurarRectNivel2(p1.x_ant, p1.y_ant, 16, 16);
+				                        }
+
+				                        if (redraw_p2) {
+				                            RestaurarRectNivel2(p2.x_ant, p2.y_ant, 16, 16);
+				                        }
+
+				                        // si está muriendo, limpia su posición actual antes de redibujar animación
+				                        if (p1.muriendo) {
+				                            RestaurarRectNivel2(p1.x, p1.y, 16, 16);
+				                        }
+
+				                        if (jugadores == 2 && p2.muriendo) {
+				                            RestaurarRectNivel2(p2.x, p2.y, 16, 16);
+				                        }
+
+				                        // ---------- Victoria ----------
+				                        // En este nivel se considera victoria cuando un jugador colisiona con DK.
+				                        if (!p1.muriendo && !victoria_activa) {
+				                            if (marioEnPlataformaVictoria_P(&p1, 0)) {
+				                                victoria_activa = 1;
+				                                break;
+				                            }
+				                        }
+
+				                        if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
+				                            if (marioEnPlataformaVictoria_P(&p2, 0)) {
+				                                victoria_activa = 1;
+				                                break;
+				                            }
+				                        }
+
+				                        // ---------- Dibujar personajes ----------
+				                        if (redraw_p1 || p1.muriendo) {
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                p1.x, p1.y,
+				                                16, 16,
+				                                p1.actual_bmp,
+				                                f1,
+				                                p1.ancho_hoja,
+				                                0x0000,
+				                                p1.flip
+				                            );
+				                        }
+
+				                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                p2.x, p2.y,
+				                                16, 16,
+				                                p2.actual_bmp,
+				                                f2,
+				                                p2.ancho_hoja,
+				                                0x0000,
+				                                p2.flip
+				                            );
+				                        }
+
+				                        // ---------- Commit ----------
+				                        if (redraw_p1 || p1.muriendo) {
+				                            p1.x_ant = p1.x;
+				                            p1.y_ant = p1.y;
+				                            p1.frame_ant = f1;
+				                        }
+
+				                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.frame_ant = f2;
+				                        }
+				                    }
+
+				                    HAL_Delay(10);
+				                    break;
+		// === Nivel 3 =========================================================================================
+				                case ESTADO_NIVEL_3:
+				                    // Nivel 3: mantiene la estructura del nivel 2, pero con plataformas, escaleras y rutas propias.
+				                    if (cambioDePantalla) {
+				                        // Esta sección se ejecuta una sola vez al entrar al nivel 3.
+				                    	HAL_UART_Transmit(&huart3, (uint8_t*)"3", 1, 1000);
+
+				                        DibujarNivel3Tileado();
+
+				                        plataformas_actuales = nivel3;
+				                        numPlataformas_actual = 25;
+				                        escaleras_actuales = nivel3_escaleras;
+				                        numEscaleras_actual = 10;
+
+				                        // ---------- P1 ----------
+				                        p1.x = 15;
+				                        p1.y = alturaPlataformaEnX(24, p1.x + 8);
+				                        p1.x_ant = p1.x;
+				                        p1.y_ant = p1.y;
+				                        p1.y_past = p1.y;
+				                        p1.flip = 0;
+				                        p1.actual_bmp = mario_camina;
+				                        p1.ancho_hoja = 48;
+				                        p1.jumpState = 0;
+				                        p1.jumpProgress = 0;
+				                        p1.inercia_x = 0;
+				                        p1.sube = 0;
+				                        p1.muriendo = 0;
+				                        p1.frame = 0;
+				                        p1.tick = 0;
+				                        p1.frame_ant = 255;
+				                        p1.color_transparente = 0x0000;
+
+				                        // ---------- P2 ----------
+				                        p2.muriendo = 0;
+				                        p2.frame = 0;
+				                        p2.tick = 0;
+				                        p2.frame_ant = 255;
+				                        p2.jumpState = 0;
+				                        p2.jumpProgress = 0;
+				                        p2.inercia_x = 0;
+				                        p2.sube = 0;
+				                        p2.flip = 0;
+				                        p2.color_transparente = 0x0000;
+
+				                        if (jugadores == 2) {
+				                            p2.x = 39;
+				                            p2.y = alturaPlataformaEnX(24, p2.x + 8);
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.y_past = p2.y;
+				                            p2.actual_bmp = luigi_camina;
+				                            p2.ancho_hoja = 48;
+				                        }
+
+				                        dk_anim_prev = -1;
+				                        princess_anim_prev = -1;
+				                        frame_counter = 0;
+
+				                        InicializarFuegosNivel3();
+				                        fuego_tick = HAL_GetTick();
+
+				                        cambioDePantalla = 0;
+				                    }
+
+				                    // ---------- DK bailando ----------
+				                    {
+				                        int dk3_anim = (frame_counter / 10) % 4;
+
+				                        if (dk3_anim != dk_anim_prev) {
+				                            RestaurarRectNivel3(LVL2_DK_X, LVL2_DK_Y, 32, 32);
+
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                LVL2_DK_X, LVL2_DK_Y,
+				                                32, 32,
+				                                dkong_dance,
+				                                dk3_anim,
+				                                128,
+				                                0x0000,
+				                                0
+				                            );
+
+				                            dk_anim_prev = dk3_anim;
+				                        }
+				                    }
+
+				                    // ---------- Princesa ----------
+				                    {
+				                        int princess_anim3 = (frame_counter / 15) % 2;
+
+				                        if (princess_anim3 != princess_anim_prev) {
+				                            RestaurarRectNivel3(LVL2_PRINCESS_X, LVL2_PRINCESS_Y, 44, 22);
+
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                LVL2_PRINCESS_X, LVL2_PRINCESS_Y,
+				                                44, 22,
+				                                princesa,
+				                                princess_anim3,
+				                                88,
+				                                0x0000,
+				                                0
+				                            );
+
+				                            princess_anim_prev = princess_anim3;
+				                        }
+				                    }
+
+				                    frame_counter++;
+
+				                    // ---------- Fuegos ----------
+				                    if (HAL_GetTick() - fuego_tick >= 90) {
+				                        fuego_tick = HAL_GetTick();
+				                        ActualizarFuegosNivel3();
+				                        DibujarFuegosNivel3();
+				                    }
+
+				                    // ---------- Colisiones con fuegos ----------
+				                    ColisionPersonajeFuegosNivel3(&p1);
+				                    if (jugadores == 2) {
+				                        ColisionPersonajeFuegosNivel3(&p2);
+				                    }
+
+				                    // ---------- Animación de muerte ----------
+				                    if (p1.muriendo) {
+				                        p1.tick++;
+
+				                        if (p1.tick >= 6) {
+				                            p1.tick = 0;
+
+				                            if (p1.frame < 4) {
+				                                p1.frame++;
+				                            } else {
+				                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
+				                                reiniciarJuego();
+				                                break;
+				                            }
+				                        }
+
+				                        p1.actual_bmp = mario_muere;
+				                        p1.ancho_hoja = 80;
+				                    }
+
+				                    if (jugadores == 2 && p2.muriendo) {
+				                        p2.tick++;
+
+				                        if (p2.tick >= 6) {
+				                            p2.tick = 0;
+
+				                            if (p2.frame < 4) {
+				                                p2.frame++;
+				                            } else {
+				                                // respawn simple de P2
+				                                p2.muriendo = 0;
+				                                p2.frame = 0;
+				                                p2.tick = 0;
+				                                p2.x = 39;
+				                                p2.y = alturaPlataformaEnX(24, p2.x + 8);
+				                                p2.x_ant = p2.x;
+				                                p2.y_ant = p2.y;
+				                                p2.y_past = p2.y;
+				                                p2.jumpState = 0;
+				                                p2.jumpProgress = 0;
+				                                p2.inercia_x = 0;
+				                                p2.sube = 0;
+				                                p2.flip = 0;
+				                                p2.actual_bmp = luigi_camina;
+				                                p2.ancho_hoja = 48;
+				                                p2.frame_ant = 255;
+				                            }
+				                        }
+
+				                        if (p2.muriendo) {
+				                            p2.actual_bmp = luigi_muere;
+				                            p2.ancho_hoja = 80;
+				                        }
+				                    }
+
+				                    // ---------- Movimiento ----------
+				                    // Aplica entrada, salto y gravedad de los jugadores antes del redibujado.
+				                    if (!p1.muriendo) {
+				                        if (comando == 'j' && p1.jumpState == 0) {
+				                            p1.jumpState = 1;
+				                            p1.jumpProgress = 0;
+				                            comando = '0';
+				                            p1.y_past = p1.y;
+				                            p1.actual_bmp = mario_brinca;
+				                            p1.ancho_hoja = 16;
+				                        }
+				                    }
+
+				                    ProcesarMovimientoNivel3(&p1);
+				                    if (jugadores == 2) {
+				                        ProcesarMovimientoNivel3(&p2);
+				                    }
+
+				                    // ---------- Frames actuales ----------
+				                    {
+				                        int f1 = p1.muriendo ? p1.frame :
+				                                 (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
+
+				                        int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
+
+				                        int f2 = 0;
+				                        int redraw_p2 = 0;
+
+				                        if (jugadores == 2) {
+				                            f2 = p2.muriendo ? p2.frame :
+				                                 (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
+
+				                            redraw_p2 = (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
+				                        }
+
+				                        // ---------- Restaurar fondos viejos ----------
+				                        if (redraw_p1) {
+				                            RestaurarRectNivel3(p1.x_ant, p1.y_ant, 16, 16);
+				                        }
+
+				                        if (redraw_p2) {
+				                            RestaurarRectNivel3(p2.x_ant, p2.y_ant, 16, 16);
+				                        }
+
+				                        if (p1.muriendo) {
+				                            RestaurarRectNivel3(p1.x, p1.y, 16, 16);
+				                        }
+
+				                        if (jugadores == 2 && p2.muriendo) {
+				                            RestaurarRectNivel3(p2.x, p2.y, 16, 16);
+				                        }
+
+				                        // ---------- Victoria ----------
+				                        if (!p1.muriendo && !victoria_activa) {
+				                            if (marioEnPlataformaVictoria_P(&p1, 0)) {
+				                                victoria_activa = 1;
+				                                break;
+				                            }
+				                        }
+
+				                        if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
+				                            if (marioEnPlataformaVictoria_P(&p2, 0)) {
+				                                victoria_activa = 1;
+				                                break;
+				                            }
+				                        }
+
+				                        // ---------- Dibujar personajes ----------
+				                        if (redraw_p1 || p1.muriendo) {
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                p1.x, p1.y,
+				                                16, 16,
+				                                p1.actual_bmp,
+				                                f1,
+				                                p1.ancho_hoja,
+				                                0x0000,
+				                                p1.flip
+				                            );
+				                        }
+
+				                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                p2.x, p2.y,
+				                                16, 16,
+				                                p2.actual_bmp,
+				                                f2,
+				                                p2.ancho_hoja,
+				                                0x0000,
+				                                p2.flip
+				                            );
+				                        }
+
+				                        // ---------- Commit ----------
+				                        if (redraw_p1 || p1.muriendo) {
+				                            p1.x_ant = p1.x;
+				                            p1.y_ant = p1.y;
+				                            p1.frame_ant = f1;
+				                        }
+
+				                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.frame_ant = f2;
+				                        }
+				                    }
+
+				                    HAL_Delay(10);
+				                    break;
+
+		// === Nivel 4 ===================================================================================
+				                case ESTADO_NIVEL_4:
+				                    // Nivel 4: usa sus propias colisiones y gana al tocar a DK.
+				                    if (cambioDePantalla) {
+				                        // Esta sección se ejecuta una sola vez al entrar al nivel 4.
+				                    	HAL_UART_Transmit(&huart3, (uint8_t*)"4", 1, 1000);
+
+				                        DibujarNivel4Tileado();
+
+				                        plataformas_actuales = nivel4;
+				                        numPlataformas_actual = 14;
+				                        escaleras_actuales = nivel4_escaleras;
+				                        numEscaleras_actual = 4;
+
+				                        // ---------- P1 ----------
+				                        p1.x = 156;
+				                        p1.y = alturaPlataformaEnX(13, p1.x + 8);
+				                        p1.x_ant = p1.x;
+				                        p1.y_ant = p1.y;
+				                        p1.y_past = p1.y;
+				                        p1.flip = 0;
+				                        p1.actual_bmp = mario_camina;
+				                        p1.ancho_hoja = 48;
+				                        p1.jumpState = 0;
+				                        p1.jumpProgress = 0;
+				                        p1.inercia_x = 0;
+				                        p1.sube = 0;
+				                        p1.muriendo = 0;
+				                        p1.frame = 0;
+				                        p1.tick = 0;
+				                        p1.frame_ant = 255;
+				                        p1.color_transparente = 0x0000;
+
+				                        // ---------- P2 ----------
+				                        p2.muriendo = 0;
+				                        p2.frame = 0;
+				                        p2.tick = 0;
+				                        p2.frame_ant = 255;
+				                        p2.jumpState = 0;
+				                        p2.jumpProgress = 0;
+				                        p2.inercia_x = 0;
+				                        p2.sube = 0;
+				                        p2.flip = 0;
+				                        p2.color_transparente = 0x0000;
+
+				                        if (jugadores == 2) {
+				                            p2.x = 180;
+				                            p2.y = alturaPlataformaEnX(13, p2.x + 8);
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.y_past = p2.y;
+				                            p2.actual_bmp = luigi_camina;
+				                            p2.ancho_hoja = 48;
+				                        }
+
+				                        dk_anim_prev = -1;
+				                        princess_anim_prev = -1;
+				                        frame_counter = 0;
+
+				                        InicializarFuegosNivel4();
+				                        fuego_tick = HAL_GetTick();
+
+				                        cambioDePantalla = 0;
+				                    }
+
+				                    // ---------- DK bailando ----------
+				                    {
+				                        int dk4_anim = (frame_counter / 10) % 4;
+
+				                        if (dk4_anim != dk_anim_prev) {
+				                            RestaurarRectNivel4(144, 48, 32, 32);
+
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                144, 48,
+				                                32, 32,
+				                                dkong_dance,
+				                                dk4_anim,
+				                                128,
+				                                0x0000,
+				                                0
+				                            );
+
+				                            dk_anim_prev = dk4_anim;
+				                        }
+				                    }
+
+				                    // ---------- Princesa ----------
+				                    {
+				                        int princess_anim4 = (frame_counter / 15) % 2;
+
+				                        if (princess_anim4 != princess_anim_prev) {
+				                            RestaurarRectNivel4(152, 10, 44, 22);
+
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                152, 10,
+				                                44, 22,
+				                                princesa,
+				                                princess_anim4,
+				                                88,
+				                                0x0000,
+				                                0
+				                            );
+
+				                            princess_anim_prev = princess_anim4;
+				                        }
+				                    }
+
+				                    frame_counter++;
+
+				                    // ---------- Fuegos ----------
+				                    if (HAL_GetTick() - fuego_tick >= 90) {
+				                        fuego_tick = HAL_GetTick();
+				                        ActualizarFuegosNivel4();
+				                        DibujarFuegosNivel4();
+				                    }
+
+				                    // ---------- Colisiones con fuegos ----------
+				                    ColisionPersonajeFuegosNivel4(&p1);
+				                    if (jugadores == 2) {
+				                        ColisionPersonajeFuegosNivel4(&p2);
+				                    }
+
+				                    // ---------- Animación de muerte ----------
+				                    if (p1.muriendo) {
+				                        p1.tick++;
+
+				                        if (p1.tick >= 6) {
+				                            p1.tick = 0;
+
+				                            if (p1.frame < 4) {
+				                                p1.frame++;
+				                            } else {
+				                            	HAL_UART_Transmit(&huart3, (uint8_t*)"D", 1, 1000);
+				                                reiniciarJuego();
+				                                break;
+				                            }
+				                        }
+
+				                        p1.actual_bmp = mario_muere;
+				                        p1.ancho_hoja = 80;
+				                    }
+
+				                    if (jugadores == 2 && p2.muriendo) {
+				                        p2.tick++;
+
+				                        if (p2.tick >= 6) {
+				                            p2.tick = 0;
+
+				                            if (p2.frame < 4) {
+				                                p2.frame++;
+				                            } else {
+				                                // Respawn simple de P2
+				                                p2.muriendo = 0;
+				                                p2.frame = 0;
+				                                p2.tick = 0;
+				                                p2.x = 180;
+				                                p2.y = alturaPlataformaEnX(13, p2.x + 8);
+				                                p2.x_ant = p2.x;
+				                                p2.y_ant = p2.y;
+				                                p2.y_past = p2.y;
+				                                p2.jumpState = 0;
+				                                p2.jumpProgress = 0;
+				                                p2.inercia_x = 0;
+				                                p2.sube = 0;
+				                                p2.flip = 0;
+				                                p2.actual_bmp = luigi_camina;
+				                                p2.ancho_hoja = 48;
+				                                p2.frame_ant = 255;
+				                            }
+				                        }
+
+				                        if (p2.muriendo) {
+				                            p2.actual_bmp = luigi_muere;
+				                            p2.ancho_hoja = 80;
+				                        }
+				                    }
+
+				                    // ---------- Movimiento ----------
+				                    ProcesarMovimientoNivel4(&p1);
+				                    if (jugadores == 2) {
+				                        ProcesarMovimientoNivel4(&p2);
+				                    }
+
+				                    // ---------- Frames actuales ----------
+				                    {
+				                        int f1 = p1.muriendo ? p1.frame :
+				                                 (p1.sube != 0 ? ((p1.y / 8) % 2) : ((p1.x / 10) % 3));
+
+				                        int redraw_p1 = (p1.x != p1.x_ant || p1.y != p1.y_ant || f1 != p1.frame_ant);
+
+				                        int f2 = 0;
+				                        int redraw_p2 = 0;
+
+				                        if (jugadores == 2) {
+				                            f2 = p2.muriendo ? p2.frame :
+				                                 (p2.sube != 0 ? ((p2.y / 8) % 2) : ((p2.x / 10) % 3));
+
+				                            redraw_p2 = (p2.x != p2.x_ant || p2.y != p2.y_ant || f2 != p2.frame_ant);
+				                        }
+
+				                        // ---------- Restaurar fondos viejos ----------
+				                        if (redraw_p1) {
+				                            RestaurarRectNivel4(p1.x_ant, p1.y_ant, 16, 16);
+				                        }
+
+				                        if (redraw_p2) {
+				                            RestaurarRectNivel4(p2.x_ant, p2.y_ant, 16, 16);
+				                        }
+
+				                        if (p1.muriendo) {
+				                            RestaurarRectNivel4(p1.x, p1.y, 16, 16);
+				                        }
+
+				                        if (jugadores == 2 && p2.muriendo) {
+				                            RestaurarRectNivel4(p2.x, p2.y, 16, 16);
+				                        }
+
+				                        // ---------- Victoria ----------
+				                        if (!p1.muriendo && !victoria_activa) {
+				                            if (hayColision(p1.x, p1.y, 16, 16, 144, 48, 32, 32)) {
+				                                victoria_activa = 1;
+				                                break;
+				                            }
+				                        }
+
+				                        if (jugadores == 2 && !p2.muriendo && !victoria_activa) {
+				                            if (hayColision(p2.x, p2.y, 16, 16, 144, 48, 32, 32)) {
+				                                victoria_activa = 1;
+				                                break;
+				                            }
+				                        }
+
+				                        // ---------- Dibujar personajes ----------
+				                        if (redraw_p1 || p1.muriendo) {
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                p1.x, p1.y,
+				                                16, 16,
+				                                p1.actual_bmp,
+				                                f1,
+				                                p1.ancho_hoja,
+				                                0x0000,
+				                                p1.flip
+				                            );
+				                        }
+
+				                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
+				                            while (hspi1.State == HAL_SPI_STATE_BUSY_TX);
+				                            LCD_DibujarSpriteTransparente(
+				                                p2.x, p2.y,
+				                                16, 16,
+				                                p2.actual_bmp,
+				                                f2,
+				                                p2.ancho_hoja,
+				                                0x0000,
+				                                p2.flip
+				                            );
+				                        }
+
+				                        // ---------- Commit ----------
+				                        if (redraw_p1 || p1.muriendo) {
+				                            p1.x_ant = p1.x;
+				                            p1.y_ant = p1.y;
+				                            p1.frame_ant = f1;
+				                        }
+
+				                        if (jugadores == 2 && (redraw_p2 || p2.muriendo)) {
+				                            p2.x_ant = p2.x;
+				                            p2.y_ant = p2.y;
+				                            p2.frame_ant = f2;
+				                        }
+				                    }
+
+				                    HAL_Delay(10);
+				                    break;
+
+				            }
 
 
     /* USER CODE END WHILE */
